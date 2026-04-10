@@ -17,7 +17,7 @@ set -euo pipefail
 
 # Skip if commit message starts with "chore(version)" to avoid infinite loop
 commit_msg=$(git log -1 --pretty=%B)
-if [[ "$commit_msg" == chore(version)* ]]; then
+if [[ "$commit_msg" == "chore(version)"* ]]; then
   exit 0
 fi
 

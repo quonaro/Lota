@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v1.1.0](https://github.com/quonaro/lota/compare/0826a66b38d5a796bea1e6081f012e198128ba60..v1.1.0) - 2026-04-10
+#### Features
+- add ASCII art banner and colored output to version command - ([0826a66](https://github.com/quonaro/lota/commit/0826a66b38d5a796bea1e6081f012e198128ba60)) - quonaro
+#### Bug Fixes
+- correct syntax in post-commit hook - ([c3207fb](https://github.com/quonaro/lota/commit/c3207fb20476ac7c07afe1f0d97814e36753ec0d)) - quonaro
+#### Refactoring
+- improve flag validation and code cleanup - ([0298036](https://github.com/quonaro/lota/commit/029803619ef5847ad7735933af381d1c73325a63)) - quonaro
+#### Miscellaneous Chores
+- add post-commit hook for automatic tagging - ([6608a02](https://github.com/quonaro/lota/commit/6608a0257d75a7b4e0b6171730ea5173ee8f2b1c)) - quonaro
+
+- - -
+
 ## [v1.0.0](https://github.com/quonaro/lota/compare/2d9727bce8fc0fcf276db571351ca69fa54dc3e1..v1.0.0) - 2026-04-10
 #### Features
 - initial commit - ([2d9727b](https://github.com/quonaro/lota/commit/2d9727bce8fc0fcf276db571351ca69fa54dc3e1)) - quonaro

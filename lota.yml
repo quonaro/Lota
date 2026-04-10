@@ -1,0 +1,73 @@
+vars:
+- ENV_VAR_1=value1
+- ENV_VAR_2=value2
+
+args:
+- environment|env:str="dev"
+- verbose|v:bool=false
+
+group1:
+  desc: Test group 1 description
+  args:
+  - environment|env:str="prod" # Override app level
+  - timeout:int=30
+  command1:
+    desc: Test command 1
+    args:
+    - param1:str
+    - param2|p:int=10
+    before: echo "before hook"
+    script: echo "test script {{environment}} {{param1}} {{param2}} timeout={{timeout}}"
+    after: echo "after hook"
+
+  command2:
+    desc: Test command 2 with wildcard
+    args:
+    - ...args
+    script: |
+      echo "multiline script"
+      echo "line 2"
+      echo "{{args}}"
+
+  command3:
+    desc: Test command 3 with flags
+    args:
+    - output|o:str="./bin"
+    - verbose|v:bool
+    script: echo "output={{output}} verbose={{verbose}}"
+
+  command4:
+    desc: Test command 4 with array
+    args:
+    - files:arr[5]
+    script: 'echo "files: {{files}}"'
+
+  command6:
+    desc: Test command 6 with bool negation
+    args:
+    - verbose|v:bool=true
+    - debug|d:bool=false
+    script: echo "verbose={{verbose}} debug={{debug}}"
+
+group2:
+  desc: Test group 2 description
+  command5:
+    desc: Test command 5 with positional and wildcard
+    args:
+    - service:str
+    - ...cmd
+    script: docker exec {{service}} {{cmd}}
+
+command6:
+  desc: 124124214
+  args:
+  - service:str
+  - ...cmd
+  script: docker exec {{service}} {{cmd}}
+
+hello-world:
+  desc: "Test Command"
+  args:
+  - name|n:str
+  script: |
+    echo Hello {{name}}

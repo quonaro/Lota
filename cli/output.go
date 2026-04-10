@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/common-nighthawk/go-figure"
+	"github.com/fatih/color"
 )
 
 const defaultInitTemplate = `# lota.yml
@@ -31,8 +34,9 @@ func PrintErrorf(format string, args ...interface{}) {
 
 // PrintVersion prints version information
 func PrintVersion() {
-	fmt.Printf("%s version %s\n", shared.AppName, shared.Version)
-	fmt.Println(shared.AppDescription)
+	figure.NewFigure(shared.AppName, "slant", true).Print()
+	fmt.Println()
+	color.Cyan("version %s\n", shared.Version)
 }
 
 // printGlobalOptions prints the global options section

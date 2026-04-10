@@ -37,15 +37,13 @@ func Run() error {
 		return fmt.Errorf("error loading config: %w", err)
 	}
 
-	cmdPath, cmdArgs := ParseCommandPath(remainingArgs)
-
-	result := FindCommand(cfg, cmdPath)
+	result, cmdArgs := ResolveCommand(cfg, remainingArgs)
 	if !result.Exists {
-		return fmt.Errorf("command not found: %s", strings.Join(cmdPath, " "))
+		return fmt.Errorf("command not found: %s", strings.Join(remainingArgs, " "))
 	}
 
-	if result.Group != nil && result.Command == nil {
-		PrintGroupHelp(result.Group)
+	if len(result.Groups) > 0 && result.Command == nil {
+		PrintGroupHelp(result.Groups[len(result.Groups)-1])
 		return nil
 	}
 

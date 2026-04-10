@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"lota/config"
 	"lota/runner"
-	"strings"
 )
 
 // LoadConfig loads and indexes the configuration.
@@ -27,44 +26,40 @@ func LoadConfig(configPath string) (*config.AppConfig, error) {
 	return cfg, nil
 }
 
-// ParseCommandPath splits ["group1", "command1", "--param1", "value"]
-// into path=["group1", "command1"] and args=["--param1", "value"].
-// Command path is always 1 or 2 elements, everything else are args.
-func ParseCommandPath(cliArgs []string) ([]string, []string) {
+// ResolveCommand greedily walks the config tree consuming CLI tokens.
+// Returns the resolved result and remaining (unconsumed) arguments.
+// Supports arbitrary nesting: group subgroup ... command [args...]
+func ResolveCommand(cfg *config.AppConfig, cliArgs []string) (config.SearchResult, []string) {
 	if len(cliArgs) == 0 {
-		return []string{}, []string{}
+		return config.SearchResult{Exists: false}, cliArgs
 	}
 
-	// Check if second element exists and is not a flag
-	if len(cliArgs) >= 2 && !strings.HasPrefix(cliArgs[1], "-") {
-		return cliArgs[:2], cliArgs[2:]
+	result := cfg.Find(cliArgs[0])
+	if !result.Exists {
+		return config.SearchResult{Exists: false}, cliArgs
 	}
 
-	return cliArgs[:1], cliArgs[1:]
-}
-
-// FindCommand finds a command by path ["group", "command"] or ["command"]
-func FindCommand(cfg *config.AppConfig, path []string) config.SearchResult {
-	if len(path) == 1 {
-		return cfg.Find(path[0])
-	}
-
-	if len(path) == 2 {
-		group := cfg.Find(path[0])
-		if group.Exists && group.Group != nil {
-			for _, cmd := range group.Group.Commands {
-				if cmd.Name == path[1] {
-					return config.SearchResult{
-						Exists:  true,
-						Command: &cmd,
-						Group:   group.Group,
-					}
-				}
-			}
+	consumed := 1
+	for consumed < len(cliArgs) {
+		// Stop if we already resolved a command (leaf)
+		if result.Command != nil {
+			break
 		}
+		// Stop if there are no groups to descend into
+		if len(result.Groups) == 0 {
+			break
+		}
+		current := result.Groups[len(result.Groups)-1]
+		sub := current.Find(cliArgs[consumed])
+		if !sub.Exists {
+			break
+		}
+		sub.Groups = append(result.Groups, sub.Groups...)
+		result = sub
+		consumed++
 	}
 
-	return config.SearchResult{Exists: false}
+	return result, cliArgs[consumed:]
 }
 
 // RunCommand executes a command with CLI arguments
@@ -73,14 +68,14 @@ func RunCommand(cfg *config.AppConfig, result config.SearchResult, cliArgs []str
 		return fmt.Errorf("not a command")
 	}
 
-	args := runner.ResolveArgs(*cfg, result.Group, *result.Command)
+	args := runner.ResolveArgs(*cfg, result.Groups, *result.Command)
 
 	parsedArgs, err := runner.ParseArgs(cliArgs, args)
 	if err != nil {
 		return err
 	}
 
-	vars := runner.ResolveVars(*cfg, result.Group, *result.Command)
+	vars := runner.ResolveVars(*cfg, result.Groups, *result.Command)
 
 	context := runner.InterpolationContext{
 		Vars:    vars,

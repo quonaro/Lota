@@ -57,6 +57,14 @@ group2:
     - service:str
     - ...cmd
     script: docker exec {{service}} {{cmd}}
+  group15:
+    desc: Test group 2 description
+    command51:
+      desc: Test command 5 with positional and wildcard
+      args:
+      - service:str
+      - ...cmd
+      script: docker exec {{service}} {{cmd}}
 
 command6:
   desc: 124124214

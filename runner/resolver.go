@@ -14,8 +14,8 @@ func VarsToEnv(vars map[string]string) []string {
 }
 
 // ResolveVars merges variables from all scopes for a specific command.
-// Priority: app vars < group vars < command vars (command overrides all)
-func ResolveVars(app config.AppConfig, group *config.Group, command config.Command) map[string]string {
+// Priority: app vars < group1 vars < group2 vars < ... < command vars
+func ResolveVars(app config.AppConfig, groups []*config.Group, command config.Command) map[string]string {
 	result := make(map[string]string)
 
 	// 1. App level variables (lowest priority)
@@ -23,9 +23,9 @@ func ResolveVars(app config.AppConfig, group *config.Group, command config.Comma
 		result[v.Name] = v.Value
 	}
 
-	// 2. Group level variables (override app level)
-	if group != nil {
-		for _, v := range group.Vars {
+	// 2. Group level variables (outermost to innermost)
+	for _, g := range groups {
+		for _, v := range g.Vars {
 			result[v.Name] = v.Value
 		}
 	}
@@ -54,8 +54,8 @@ func mergeArg(result []config.Arg, seen map[string]bool, arg config.Arg) []confi
 }
 
 // ResolveArgs merges arguments from all scopes for a specific command.
-// Priority: app args < group args < command args (command overrides all)
-func ResolveArgs(app config.AppConfig, group *config.Group, command config.Command) []config.Arg {
+// Priority: app args < group1 args < group2 args < ... < command args
+func ResolveArgs(app config.AppConfig, groups []*config.Group, command config.Command) []config.Arg {
 	result := make([]config.Arg, 0)
 	seen := make(map[string]bool)
 
@@ -64,9 +64,9 @@ func ResolveArgs(app config.AppConfig, group *config.Group, command config.Comma
 		result = mergeArg(result, seen, arg)
 	}
 
-	// 2. Group level arguments (override app level)
-	if group != nil {
-		for _, arg := range group.Args {
+	// 2. Group level arguments (outermost to innermost)
+	for _, g := range groups {
+		for _, arg := range g.Args {
 			result = mergeArg(result, seen, arg)
 		}
 	}

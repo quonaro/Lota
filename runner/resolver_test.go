@@ -65,14 +65,14 @@ func TestResolveVars(t *testing.T) {
 	tests := []struct {
 		name     string
 		app      config.AppConfig
-		group    *config.Group
+		groups   []*config.Group
 		command  config.Command
 		expected map[string]string
 	}{
 		{
 			name:    "only app vars",
 			app:     config.AppConfig{Vars: []config.Var{{Name: "APP_VAR", Value: "app_value"}}},
-			group:   nil,
+			groups:  nil,
 			command: config.Command{Name: "cmd"},
 			expected: map[string]string{
 				"APP_VAR": "app_value",
@@ -81,10 +81,10 @@ func TestResolveVars(t *testing.T) {
 		{
 			name: "group overrides app",
 			app:  config.AppConfig{Vars: []config.Var{{Name: "DOCKER", Value: "docker"}}},
-			group: &config.Group{
+			groups: []*config.Group{{
 				Name: "dev",
 				Vars: []config.Var{{Name: "DOCKER", Value: "docker-compose"}},
-			},
+			}},
 			command: config.Command{Name: "run"},
 			expected: map[string]string{
 				"DOCKER": "docker-compose",
@@ -93,10 +93,10 @@ func TestResolveVars(t *testing.T) {
 		{
 			name: "command overrides group and app",
 			app:  config.AppConfig{Vars: []config.Var{{Name: "ENV", Value: "global"}}},
-			group: &config.Group{
+			groups: []*config.Group{{
 				Name: "dev",
 				Vars: []config.Var{{Name: "ENV", Value: "dev"}},
-			},
+			}},
 			command: config.Command{
 				Name: "run",
 				Vars: []config.Var{{Name: "ENV", Value: "local"}},
@@ -113,13 +113,13 @@ func TestResolveVars(t *testing.T) {
 					{Name: "GLOBAL", Value: "global_value"},
 				},
 			},
-			group: &config.Group{
+			groups: []*config.Group{{
 				Name: "dev",
 				Vars: []config.Var{
 					{Name: "ENV", Value: "development"},
 					{Name: "GLOBAL", Value: "group_overridden"},
 				},
-			},
+			}},
 			command: config.Command{
 				Name: "run",
 				Vars: []config.Var{
@@ -136,15 +136,27 @@ func TestResolveVars(t *testing.T) {
 		{
 			name:     "no vars",
 			app:      config.AppConfig{},
-			group:    nil,
+			groups:   nil,
 			command:  config.Command{Name: "cmd"},
 			expected: map[string]string{},
+		},
+		{
+			name: "nested groups override outer",
+			app:  config.AppConfig{Vars: []config.Var{{Name: "ENV", Value: "global"}}},
+			groups: []*config.Group{
+				{Name: "outer", Vars: []config.Var{{Name: "ENV", Value: "outer"}}},
+				{Name: "inner", Vars: []config.Var{{Name: "ENV", Value: "inner"}}},
+			},
+			command: config.Command{Name: "cmd"},
+			expected: map[string]string{
+				"ENV": "inner",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ResolveVars(tt.app, tt.group, tt.command)
+			result := ResolveVars(tt.app, tt.groups, tt.command)
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("ResolveVars() = %v, want %v", result, tt.expected)
 			}
@@ -157,7 +169,7 @@ func TestResolveArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		app      config.AppConfig
-		group    *config.Group
+		groups   []*config.Group
 		command  config.Command
 		expected []config.Arg
 	}{
@@ -169,7 +181,7 @@ func TestResolveArgs(t *testing.T) {
 					{Name: "verbose", Type: "bool", Default: "false"},
 				},
 			},
-			group:   nil,
+			groups:  nil,
 			command: config.Command{Name: "test-command"},
 			expected: []config.Arg{
 				{Name: "environment", Type: "str", Default: "dev"},
@@ -184,13 +196,13 @@ func TestResolveArgs(t *testing.T) {
 					{Name: "verbose", Type: "bool", Default: "false"},
 				},
 			},
-			group: &config.Group{
+			groups: []*config.Group{{
 				Name: "test-group",
 				Args: []config.Arg{
 					{Name: "environment", Type: "str", Default: "prod"},
 					{Name: "timeout", Type: "int", Default: "30"},
 				},
-			},
+			}},
 			command: config.Command{
 				Name: "test-command",
 				Args: []config.Arg{
@@ -209,7 +221,7 @@ func TestResolveArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ResolveArgs(tt.app, tt.group, tt.command)
+			result := ResolveArgs(tt.app, tt.groups, tt.command)
 			if !argsSlicesEqual(result, tt.expected) {
 				t.Errorf("ResolveArgs() = %v, want %v", result, tt.expected)
 			}

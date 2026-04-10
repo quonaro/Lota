@@ -96,18 +96,20 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	g.Commands = make([]Command, 0)
+	g.Groups = make([]Group, 0)
 
 	for i := 0; i < len(node.Content); i += 2 {
 		key := node.Content[i].Value
+		valueNode := node.Content[i+1]
 		switch key {
 		case "desc":
-			g.Desc = node.Content[i+1].Value
+			g.Desc = valueNode.Value
 		case "vars":
-			if err := node.Content[i+1].Decode(&g.Vars); err != nil {
+			if err := valueNode.Decode(&g.Vars); err != nil {
 				return err
 			}
 		case "args":
-			if err := node.Content[i+1].Decode(&g.RawArgs); err != nil {
+			if err := valueNode.Decode(&g.RawArgs); err != nil {
 				return err
 			}
 			g.Args = make([]Arg, len(g.RawArgs))
@@ -117,12 +119,21 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 				}
 			}
 		default:
-			var cmd Command
-			if err := node.Content[i+1].Decode(&cmd); err != nil {
-				return err
+			if hasField(valueNode, "script") {
+				var cmd Command
+				if err := valueNode.Decode(&cmd); err != nil {
+					return err
+				}
+				cmd.Name = key
+				g.Commands = append(g.Commands, cmd)
+			} else {
+				var sub Group
+				if err := valueNode.Decode(&sub); err != nil {
+					return err
+				}
+				sub.Name = key
+				g.Groups = append(g.Groups, sub)
 			}
-			cmd.Name = key
-			g.Commands = append(g.Commands, cmd)
 		}
 	}
 

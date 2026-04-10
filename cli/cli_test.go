@@ -6,63 +6,6 @@ import (
 	"testing"
 )
 
-func TestParseCommandPath(t *testing.T) {
-	tests := []struct {
-		name         string
-		input        []string
-		expectedPath []string
-		expectedArgs []string
-	}{
-		{
-			name:         "empty input",
-			input:        []string{},
-			expectedPath: []string{},
-			expectedArgs: []string{},
-		},
-		{
-			name:         "single command",
-			input:        []string{"build"},
-			expectedPath: []string{"build"},
-			expectedArgs: []string{},
-		},
-		{
-			name:         "group and command",
-			input:        []string{"dev", "run"},
-			expectedPath: []string{"dev", "run"},
-			expectedArgs: []string{},
-		},
-		{
-			name:         "command with positional arg",
-			input:        []string{"deploy", "production"},
-			expectedPath: []string{"deploy", "production"},
-			expectedArgs: []string{},
-		},
-		{
-			name:         "command with flag stops at two elements",
-			input:        []string{"build", "--verbose"},
-			expectedPath: []string{"build"},
-			expectedArgs: []string{"--verbose"},
-		},
-		{
-			name:         "group and command with args",
-			input:        []string{"dev", "run", "--port", "8080"},
-			expectedPath: []string{"dev", "run"},
-			expectedArgs: []string{"--port", "8080"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path, args := ParseCommandPath(tt.input)
-			if !reflect.DeepEqual(path, tt.expectedPath) {
-				t.Errorf("path = %v, want %v", path, tt.expectedPath)
-			}
-			if !reflect.DeepEqual(args, tt.expectedArgs) {
-				t.Errorf("args = %v, want %v", args, tt.expectedArgs)
-			}
-		})
-	}
-}
 
 func TestParseGlobalFlags(t *testing.T) {
 	tests := []struct {
@@ -168,7 +111,7 @@ func TestParseGlobalFlags(t *testing.T) {
 	}
 }
 
-func TestFindCommand(t *testing.T) {
+func TestResolveCommand(t *testing.T) {
 	cfg := &config.AppConfig{
 		Commands: []config.Command{
 			{Name: "build", Script: "go build"},
@@ -181,6 +124,22 @@ func TestFindCommand(t *testing.T) {
 					{Name: "run", Script: "go run ."},
 					{Name: "watch", Script: "air"},
 				},
+				Groups: []config.Group{
+					{
+						Name: "docker",
+						Commands: []config.Command{
+							{Name: "up", Script: "docker-compose up"},
+						},
+						Groups: []config.Group{
+							{
+								Name: "logs",
+								Commands: []config.Command{
+									{Name: "tail", Script: "docker-compose logs -f"},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -189,57 +148,103 @@ func TestFindCommand(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		path          []string
-		expectExists  bool
-		expectCommand bool
-		expectGroup   bool
+		name           string
+		args           []string
+		expectExists   bool
+		expectCommand  bool
+		expectGroups   int
+		expectRemain   []string
 	}{
 		{
-			name:          "top-level command",
-			path:          []string{"build"},
-			expectExists:  true,
-			expectCommand: true,
+			name:         "empty input",
+			args:         []string{},
+			expectExists: false,
 		},
 		{
-			name:          "another top-level command",
-			path:          []string{"test"},
+			name:          "top-level command",
+			args:          []string{"build"},
 			expectExists:  true,
 			expectCommand: true,
+			expectRemain:  []string{},
+		},
+		{
+			name:          "top-level command with flag args",
+			args:          []string{"build", "--verbose"},
+			expectExists:  true,
+			expectCommand: true,
+			expectRemain:  []string{"--verbose"},
 		},
 		{
 			name:         "non-existing command",
-			path:         []string{"nonexistent"},
+			args:         []string{"nonexistent"},
 			expectExists: false,
 		},
 		{
-			name:        "existing group",
-			path:        []string{"dev"},
+			name:         "existing group",
+			args:         []string{"dev"},
 			expectExists: true,
-			expectGroup: true,
+			expectGroups: 1,
+			expectRemain: []string{},
 		},
 		{
 			name:          "command inside group",
-			path:          []string{"dev", "run"},
+			args:          []string{"dev", "run"},
 			expectExists:  true,
 			expectCommand: true,
-			expectGroup:   true,
+			expectGroups:  1,
+			expectRemain:  []string{},
 		},
 		{
-			name:         "non-existing command in group",
-			path:         []string{"dev", "nonexistent"},
-			expectExists: false,
+			name:          "command inside group with positional args",
+			args:          []string{"dev", "run", "myarg", "--port", "8080"},
+			expectExists:  true,
+			expectCommand: true,
+			expectGroups:  1,
+			expectRemain:  []string{"myarg", "--port", "8080"},
 		},
 		{
-			name:         "non-existing group",
-			path:         []string{"nonexistent", "run"},
-			expectExists: false,
+			name:         "nested group",
+			args:         []string{"dev", "docker"},
+			expectExists: true,
+			expectGroups: 2,
+			expectRemain: []string{},
+		},
+		{
+			name:          "command in nested group",
+			args:          []string{"dev", "docker", "up"},
+			expectExists:  true,
+			expectCommand: true,
+			expectGroups:  2,
+			expectRemain:  []string{},
+		},
+		{
+			name:          "deeply nested command (3 levels)",
+			args:          []string{"dev", "docker", "logs", "tail"},
+			expectExists:  true,
+			expectCommand: true,
+			expectGroups:  3,
+			expectRemain:  []string{},
+		},
+		{
+			name:         "deeply nested group",
+			args:         []string{"dev", "docker", "logs"},
+			expectExists: true,
+			expectGroups: 3,
+			expectRemain: []string{},
+		},
+		{
+			name:          "deeply nested command with remaining args",
+			args:          []string{"dev", "docker", "logs", "tail", "--follow"},
+			expectExists:  true,
+			expectCommand: true,
+			expectGroups:  3,
+			expectRemain:  []string{"--follow"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FindCommand(cfg, tt.path)
+			result, remain := ResolveCommand(cfg, tt.args)
 
 			if result.Exists != tt.expectExists {
 				t.Errorf("Exists = %v, want %v", result.Exists, tt.expectExists)
@@ -250,8 +255,11 @@ func TestFindCommand(t *testing.T) {
 			if !tt.expectCommand && result.Command != nil {
 				t.Errorf("expected Command to be nil, got %v", result.Command.Name)
 			}
-			if tt.expectGroup && result.Group == nil {
-				t.Error("expected Group to be non-nil")
+			if tt.expectGroups > 0 && len(result.Groups) != tt.expectGroups {
+				t.Errorf("Groups count = %v, want %v", len(result.Groups), tt.expectGroups)
+			}
+			if tt.expectRemain != nil && !reflect.DeepEqual(remain, tt.expectRemain) {
+				t.Errorf("remaining = %v, want %v", remain, tt.expectRemain)
 			}
 		})
 	}

@@ -102,8 +102,13 @@ func PrintCommandHelp(result config.SearchResult) {
 
 	cmd := *result.Command
 	cmdName := cmd.Name
-	if result.Group != nil {
-		cmdName = result.Group.Name + " " + cmdName
+	if len(result.Groups) > 0 {
+		parts := make([]string, 0, len(result.Groups)+1)
+		for _, g := range result.Groups {
+			parts = append(parts, g.Name)
+		}
+		parts = append(parts, cmdName)
+		cmdName = strings.Join(parts, " ")
 	}
 
 	fmt.Printf("Usage: %s %s [ARGS]\n", strings.ToLower(shared.AppName), cmdName)
@@ -154,6 +159,10 @@ func PrintCommandHelp(result config.SearchResult) {
 // PrintGroupHelp displays help for a specific group
 func PrintGroupHelp(group *config.Group) {
 	fmt.Println("Commands:")
+
+	for _, sub := range group.Groups {
+		fmt.Printf("  %-10s %s\n", sub.Name, sub.Desc)
+	}
 
 	for _, cmd := range group.Commands {
 		fmt.Printf("  %-10s %s\n", cmd.Name, cmd.Desc)

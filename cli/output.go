@@ -54,7 +54,7 @@ func printGlobalOptions() {
 func PrintHelp(configPath string) {
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n\n", err)
 		printGlobalOptions()
 		return
 	}

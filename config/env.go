@@ -22,7 +22,7 @@ func loadEnvironmentFile(basePath, path, format string) ([]Var, error) {
 
 	file, err := os.Open(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open env file: %w", err)
+		return nil, fmt.Errorf("env file not found: %s", fullPath)
 	}
 	defer file.Close()
 
@@ -65,7 +65,7 @@ func ExpandVarsFromFile(vars []Var, basePath string) ([]Var, error) {
 			// Load variables from file
 			fileVars, err := loadEnvironmentFile(basePath, v.FromFile, v.Format)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load env file %s: %w", v.FromFile, err)
+				return nil, err
 			}
 			result = append(result, fileVars...)
 		} else {

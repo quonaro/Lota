@@ -233,19 +233,16 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.ScalarNode {
 		return fmt.Errorf("expected scalar node for var, got %d", node.Kind)
 	}
-
+	v.IsFile = false
+	tag := node.Tag
 	value := node.Value
 
-	// Format: @import:format <path>
-	if strings.HasPrefix(value, "@import:") {
-		rest := strings.TrimPrefix(value, "@import:")
-		parts := strings.SplitN(rest, " ", 2)
-		if len(parts) == 2 {
-			v.Format = parts[0]
-			v.FromFile = strings.TrimSpace(parts[1])
-			return nil
-		}
-		return fmt.Errorf("invalid import format: %s", value)
+	// Format: !import:format <path>
+	if strings.HasPrefix(tag, "!import:") {
+		v.IsFile = true
+		v.Format = strings.TrimPrefix(tag, "!import:")
+		v.FromFile = strings.TrimSpace(value)
+		return nil
 	}
 
 	// Format: name=value

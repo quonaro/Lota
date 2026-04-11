@@ -1,6 +1,6 @@
 vars:
 - ENV_VAR_1=value1
-- "@import:env .env"
+- !import:env .env
 - ENV_VAR_2=value2
 
 args:
@@ -10,7 +10,7 @@ args:
 group1:
   desc: Test group 1 description
   args:
-  - environment|env:str="prod" # Override app level
+  - environment|env:str="prod"
   - timeout:int=30
   command1:
     desc: Test command 1

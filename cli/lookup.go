@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"lota/config"
 	"lota/runner"
+
+	"github.com/fatih/color"
 )
 
 // LoadConfig loads and indexes the configuration.
@@ -19,13 +21,17 @@ func LoadConfig(configPath string) (*config.AppConfig, error) {
 		return nil, err
 	}
 
-	// Expand all variables from env files (app, groups, commands)
-	if err := config.ExpandAllVars(cfg, fc.Path); err != nil {
-		return nil, err
+	// Validates the configuration (includes ExpandAllVars and BuildIndexes)
+	result := config.GetValidator(*cfg, fc.Path).Validate()
+
+	// Print warnings if any
+	for _, warning := range result.Warnings {
+		color.Yellow("Warning: %s\n\n", warning)
 	}
 
-	if err := cfg.BuildIndexes(); err != nil {
-		return nil, err
+	if result.Error != nil {
+		color.Red("Error: %v\n\n", result.Error)
+		return nil, result.Error
 	}
 
 	return cfg, nil

@@ -57,6 +57,7 @@ type Var struct {
 	Value    string
 	FromFile string `yaml:"-"` // path to file to import variables from
 	Format   string `yaml:"-"` // file format: env, json, toml, etc.
+	IsFile   bool   `yaml:"-"` // whether this variable is loaded from a file
 }
 
 type SearchResult struct {
@@ -143,4 +144,42 @@ func (g *Group) Find(name string) SearchResult {
 	}
 
 	return SearchResult{Exists: false}
+}
+
+func (c *AppConfig) AllVars() []Var {
+	var all []Var
+
+	// App level vars
+	all = append(all, c.Vars...)
+
+	// Collect from groups (including nested)
+	for _, group := range c.Groups {
+		all = append(all, group.allVarsRecursive()...)
+	}
+
+	// Collect from commands
+	for _, cmd := range c.Commands {
+		all = append(all, cmd.Vars...)
+	}
+
+	return all
+}
+
+func (g *Group) allVarsRecursive() []Var {
+	var all []Var
+
+	// Group level vars
+	all = append(all, g.Vars...)
+
+	// Nested groups
+	for _, sub := range g.Groups {
+		all = append(all, sub.allVarsRecursive()...)
+	}
+
+	// Commands in this group
+	for _, cmd := range g.Commands {
+		all = append(all, cmd.Vars...)
+	}
+
+	return all
 }

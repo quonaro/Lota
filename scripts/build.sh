@@ -32,7 +32,9 @@ for target in "${TARGETS[@]}"; do
   OS=$(echo "${target}" | awk '{print $1}')
   ARCH=$(echo "${target}" | awk '{print $2}')
 
-  OUT="${OUTPUT_DIR}/${BINARY}-${OS}-${ARCH}"
+  FILE_OS="${OS}"
+  [[ "${OS}" == "darwin" ]] && FILE_OS="macos"
+  OUT="${OUTPUT_DIR}/${BINARY}-${FILE_OS}-${ARCH}"
   [[ "${OS}" == "windows" ]] && OUT="${OUT}.exe"
 
   printf "  %-10s %-8s -> %s\n" "${OS}" "${ARCH}" "${OUT}"

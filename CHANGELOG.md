@@ -2,6 +2,17 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v1.3.0](https://github.com/quonaro/lota/compare/5de88d377cbc69336252aa9112d747b6ac3d0e77..v1.3.0) - 2026-04-13
+#### Features
+- rename darwin to macos in build output filenames - ([c49afe2](https://github.com/quonaro/lota/commit/c49afe20fa6b32c9a0a535eff0d0d181772f5515)) - quonaro
+- add configuration validation with warnings for missing env files - ([3b2de93](https://github.com/quonaro/lota/commit/3b2de9399894fe634035152db668e5503fc89056)) - quonaro
+- add environment file import support with @import directive - ([578b715](https://github.com/quonaro/lota/commit/578b7153fef17e3d3b585aa6f92ba5ec032ca67a)) - quonaro
+- add hierarchical shell configuration with OS-specific defaults - ([5de88d3](https://github.com/quonaro/lota/commit/5de88d377cbc69336252aa9112d747b6ac3d0e77)) - quonaro
+#### Refactoring
+- change ConfigValidator to use pointer receiver and fix shell command parsing - ([5406dc3](https://github.com/quonaro/lota/commit/5406dc3853bed855081a6521baca7d88385f8e6f)) - quonaro
+
+- - -
+
 ## [v1.2.0](https://github.com/quonaro/lota/compare/0da49f2123aa3012b305a4ec39df75df0ea23836..v1.2.0) - 2026-04-10
 #### Features
 - add context-aware help for specific commands - ([3bd7d49](https://github.com/quonaro/lota/commit/3bd7d49ec49789eae1bc7c28328c14cb854a69c5)) - quonaro

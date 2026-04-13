@@ -5,11 +5,11 @@ import (
 )
 
 type ConfigValidator struct {
-	AppConfig
+	*AppConfig
 	basePath string
 }
 
-func GetValidator(config AppConfig, basePath string) ConfigValidator {
+func GetValidator(config *AppConfig, basePath string) ConfigValidator {
 	return ConfigValidator{config, basePath}
 }
 
@@ -26,7 +26,7 @@ func (c ConfigValidator) Validate() ValidationResult {
 	result := ValidationResult{}
 
 	// Expand all variables from env files (app, groups, commands)
-	if err := ExpandAllVars(&c.AppConfig, c.basePath); err != nil {
+	if err := ExpandAllVars(c.AppConfig, c.basePath); err != nil {
 		// Check if it's a file not found error - treat as warning
 		if strings.Contains(err.Error(), "env file not found") {
 			result.Warnings = append(result.Warnings, err.Error())

@@ -13,7 +13,7 @@ func TestExecuteCommand_EmptyScript(t *testing.T) {
 	cmd := &config.Command{Name: "noop"}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh"); err != nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -26,7 +26,7 @@ func TestExecuteCommand_DryRun_ScriptNotExecuted(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{DryRun: true}, "sh"); err != nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{DryRun: true}, "sh -c"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -44,7 +44,7 @@ func TestExecuteCommand_DryRun_BeforeHookNotExecuted(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{DryRun: true}, "sh"); err != nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{DryRun: true}, "sh -c"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestExecuteCommand_ScriptInterpolationError(t *testing.T) {
 	cmd := &config.Command{Name: "test", Script: "echo {{undefined}}"}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh"); err == nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c"); err == nil {
 		t.Error("expected error for undefined placeholder, got nil")
 	}
 }
@@ -70,7 +70,7 @@ func TestExecuteCommand_BeforeHookInterpolationError(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh"); err == nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c"); err == nil {
 		t.Error("expected error for undefined placeholder in before hook, got nil")
 	}
 }
@@ -79,7 +79,7 @@ func TestExecuteCommand_WithInterpolation(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out.txt")
 	cmd := &config.Command{
 		Name:   "test",
-		Script: fmt.Sprintf("echo {{msg}} > %s", out),
+		Script: fmt.Sprintf("echo {{msg}} > \"%s\"", out),
 	}
 	ctx := InterpolationContext{
 		Vars:    map[string]string{},
@@ -87,7 +87,7 @@ func TestExecuteCommand_WithInterpolation(t *testing.T) {
 		ArgDefs: []config.Arg{{Name: "msg", Type: "str"}},
 	}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh"); err != nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -107,13 +107,13 @@ func TestExecuteCommand_BeforeAndAfterHooksExecuted(t *testing.T) {
 
 	cmd := &config.Command{
 		Name:   "test",
-		Before: fmt.Sprintf("touch %s", beforeMarker),
+		Before: fmt.Sprintf("touch \"%s\"", beforeMarker),
 		Script: "echo noop",
-		After:  fmt.Sprintf("touch %s", afterMarker),
+		After:  fmt.Sprintf("touch \"%s\"", afterMarker),
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh"); err != nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -129,14 +129,14 @@ func TestExecuteCommand_VarsPassedAsEnv(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out.txt")
 	cmd := &config.Command{
 		Name:   "test",
-		Script: fmt.Sprintf("echo $MY_VAR > %s", out),
+		Script: fmt.Sprintf("echo $MY_VAR > \"%s\"", out),
 	}
 	ctx := InterpolationContext{
 		Vars: map[string]string{"MY_VAR": "from_env"},
 		Args: map[string]string{},
 	}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh"); err != nil {
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

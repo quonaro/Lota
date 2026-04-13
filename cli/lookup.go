@@ -22,7 +22,7 @@ func LoadConfig(configPath string) (*config.AppConfig, error) {
 	}
 
 	// Validates the configuration (includes ExpandAllVars and BuildIndexes)
-	result := config.GetValidator(*cfg, fc.Path).Validate()
+	result := config.GetValidator(cfg, fc.Path).Validate()
 
 	// Print warnings if any
 	for _, warning := range result.Warnings {

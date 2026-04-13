@@ -24,12 +24,12 @@ hello:
 
 // PrintError prints a formatted error message to stderr
 func PrintError(message string) {
-	fmt.Fprintf(os.Stderr, "ERROR: %s\n", message)
+	color.Red("ERROR: %s\n", message)
 }
 
 // PrintErrorf prints a formatted error message to stderr
 func PrintErrorf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "ERROR: "+format+"\n", args...)
+	color.Red("ERROR: "+format+"\n", args...)
 }
 
 // PrintVersion prints version information
@@ -54,7 +54,7 @@ func printGlobalOptions() {
 func PrintHelp(configPath string) {
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n\n", err)
+		color.Red("Error loading config: %v\n\n", err)
 		printGlobalOptions()
 		return
 	}

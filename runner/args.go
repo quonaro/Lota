@@ -24,9 +24,9 @@ func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error
 			wildcardArg = argDef
 		} else {
 			// bool args are always flags (--name or --!name).
-			// str/int/arr args without Short are positional.
-			// To make a str/int/arr arg a flag, set Short.
-			isFlag := argDef.Short != "" || argDef.Type == "bool"
+			// str/int/arr args with default values must use Short to be flags.
+			// str/int/arr args without default and without Short are positional.
+			isFlag := argDef.Short != "" || argDef.Type == "bool" || argDef.Default != ""
 
 			if isFlag {
 				if argDef.Name != "" {

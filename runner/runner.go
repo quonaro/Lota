@@ -5,6 +5,7 @@ import (
 	"lota/config"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // RunOptions controls execution behavior
@@ -15,7 +16,12 @@ type RunOptions struct {
 
 // executeShell runs a script in shell with environment variables
 func executeShell(script string, env []string, shell string) error {
-	cmd := exec.Command(shell, script)
+	// Split shell command and flags (e.g., "bash -c" -> ["bash", "-c"])
+	parts := strings.Fields(shell)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty shell command")
+	}
+	cmd := exec.Command(parts[0], append(parts[1:], script)...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -55,27 +61,6 @@ func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunO
 		}
 	}
 
-	// after hook via defer (always executes)
-	defer func() {
-		if cmd.After != "" {
-			interpolatedAfter, err := Interpolate(cmd.After, context)
-			if err != nil {
-				fmt.Printf("after hook interpolation failed: %v\n", err)
-				return
-			}
-			if opts.Verbose {
-				fmt.Printf("[verbose] after: %s\n", interpolatedAfter)
-			}
-			if opts.DryRun {
-				fmt.Printf("[dry-run] after:\n%s\n", interpolatedAfter)
-				return
-			}
-			if err := executeShell(interpolatedAfter, env, shell); err != nil {
-				fmt.Printf("after hook failed: %v\n", err)
-			}
-		}
-	}()
-
 	// script
 	if cmd.Script != "" {
 		interpolatedScript, err := Interpolate(cmd.Script, context)
@@ -89,7 +74,27 @@ func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunO
 			fmt.Printf("[dry-run] script:\n%s\n", interpolatedScript)
 			return nil
 		}
-		return executeShell(interpolatedScript, env, shell)
+		if err := executeShell(interpolatedScript, env, shell); err != nil {
+			return err
+		}
+	}
+
+	// after hook
+	if cmd.After != "" {
+		interpolatedAfter, err := Interpolate(cmd.After, context)
+		if err != nil {
+			return fmt.Errorf("after hook interpolation failed: %w", err)
+		}
+		if opts.Verbose {
+			fmt.Printf("[verbose] after: %s\n", interpolatedAfter)
+		}
+		if opts.DryRun {
+			fmt.Printf("[dry-run] after:\n%s\n", interpolatedAfter)
+			return nil
+		}
+		if err := executeShell(interpolatedAfter, env, shell); err != nil {
+			return fmt.Errorf("after hook failed: %w", err)
+		}
 	}
 
 	return nil

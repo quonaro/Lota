@@ -17,7 +17,7 @@ type ValidationError struct {
 }
 
 func (e ValidationError) Error() string {
-	return fmt.Sprintf("validation error for placeholder '%s': %s", e.Placeholder, e.Reason)
+	return fmt.Sprintf("%s is not set", e.Placeholder)
 }
 
 // InterpolationContext holds all information needed for interpolation
@@ -34,12 +34,19 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 
 	placeholders := findPlaceholders(script)
 
+	// Collect all validation errors
+	var errors []string
 	for _, placeholder := range placeholders {
 		value, err := interpolatePlaceholder(placeholder, context)
 		if err != nil {
-			return "", err
+			errors = append(errors, placeholder)
+			continue
 		}
 		result = strings.ReplaceAll(result, "{{"+placeholder+"}}", value)
+	}
+
+	if len(errors) > 0 {
+		return "", fmt.Errorf("%s is required, check --help for more information", strings.Join(errors, ", "))
 	}
 
 	return result, nil
@@ -85,7 +92,7 @@ func interpolatePlaceholder(placeholder string, context InterpolationContext) (s
 
 	return "", ValidationError{
 		Placeholder: placeholder,
-		Reason:      "variable or argument not found",
+		Reason:      fmt.Sprintf("'%s' is not defined", placeholder),
 	}
 }
 

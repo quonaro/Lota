@@ -76,6 +76,16 @@ func hasHelpFlag(args []string) bool {
 	return false
 }
 
+// hasVerboseFlag checks if --verbose or -v appears anywhere in the args
+func hasVerboseFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--verbose" || arg == "-v" {
+			return true
+		}
+	}
+	return false
+}
+
 // validateFlags checks for conflicting flag combinations
 func validateFlags(flags GlobalFlags) error {
 	if flags.Init && (flags.Help || flags.Version || flags.Verbose || flags.DryRun) {

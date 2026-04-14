@@ -60,6 +60,11 @@ func ResolveCommand(cfg *config.AppConfig, cliArgs []string) (config.SearchResul
 		if len(result.Groups) == 0 {
 			break
 		}
+		// Skip flags (tokens starting with -) during path resolution
+		if len(cliArgs[consumed]) > 0 && cliArgs[consumed][0] == '-' {
+			consumed++
+			continue
+		}
 		current := result.Groups[len(result.Groups)-1]
 		sub := current.Find(cliArgs[consumed])
 		if !sub.Exists {

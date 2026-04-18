@@ -53,3 +53,6 @@ dist
 .env.local
 
 lota
+
+.agent
+.windsurf

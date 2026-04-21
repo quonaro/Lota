@@ -4,13 +4,19 @@ on:
   workflow_run:
     workflows: ["Lota CI & Release"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.9.0 or v1.9.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   auto_tag:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -38,3 +44,29 @@ jobs:
       - name: No release needed
         if: ${{ steps.bump.outputs.version == '' }}
         run: echo "No conventional commits requiring a new release tag"
+
+  manual_tag:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Create and push tag
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION}"
+          if [[ "${VERSION}" != v* ]]; then
+            VERSION="v${VERSION}"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "Tag ${VERSION} already exists"
+            exit 1
+          fi
+
+          git tag "${VERSION}" main
+          git push origin "${VERSION}"

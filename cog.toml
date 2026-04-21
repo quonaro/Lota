@@ -10,15 +10,11 @@ skip_untracked = false
 
 pre_bump_hooks = [
   "go test ./...",
-  "sed -i 's/Version   = \"[^\"]*\"/Version   = \"{{version}}\"/' shared/constants.go",
-  "git add shared/constants.go"
+  "sed -E -i 's|^var Version = \"[^\"]*\"$|var Version = \"{{version}}\"|' shared/constants.go",
+  "git add shared/constants.go",
 ]
 
-post_bump_hooks = [
-  "git push",
-  "git push origin v{{version}}",
-  "bash scripts/update-aur.sh"
-]
+post_bump_hooks = ["git push", "git push origin v{{version}}"]
 
 [git_hooks.commit-msg]
 script = "cog verify --file $1"

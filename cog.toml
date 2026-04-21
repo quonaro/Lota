@@ -1,15 +1,17 @@
 tag_prefix = "v"
-from_latest_tag = false
+from_latest_tag = true
 ignore_merge_commits = true
 ignore_fixup_commits = true
-disable_changelog = false
+disable_changelog = true
 disable_bump_commit = false
 branch_whitelist = ["main"]
 skip_ci = "[skip ci]"
 skip_untracked = false
 
 pre_bump_hooks = [
-  "go test ./..."
+  "go test ./...",
+  "sed -i 's/Version   = \"[^\"]*\"/Version   = \"{{version}}\"/' shared/constants.go",
+  "git add shared/constants.go"
 ]
 
 post_bump_hooks = [
@@ -21,11 +23,3 @@ post_bump_hooks = [
 script = "cog verify --file $1"
 
 [commit_types]
-
-[changelog]
-path = "CHANGELOG.md"
-template = "remote"
-remote = "github.com"
-repository = "lota"
-owner = "quonaro"
-authors = []

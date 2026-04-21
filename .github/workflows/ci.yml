@@ -61,3 +61,30 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  aur_sync:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [ release ]
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+    - name: Install AUR sync dependencies
+      run: pacman -Syu --noconfirm git openssh base-devel
+    - uses: actions/checkout@v6
+    - name: Setup AUR SSH key
+      env:
+        AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+      run: |
+        if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
+          echo "AUR_SSH_PRIVATE_KEY secret is not configured"
+          exit 1
+        fi
+        install -m 700 -d ~/.ssh
+        printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+    - name: Update AUR package
+      env:
+        VERSION: ${{ github.ref_name }}
+      run: ./scripts/update-aur.sh "${VERSION}"

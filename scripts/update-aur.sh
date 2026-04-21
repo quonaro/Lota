@@ -1,25 +1,41 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-AUR_DIR="${AUR_DIR:-../lota-aur}"
-VERSION="{{version}}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+AUR_DIR="${AUR_DIR:-${ROOT_DIR}/../lota-aur}"
+AUR_REPO_URL="${AUR_REPO_URL:-ssh://aur@aur.archlinux.org/lota.git}"
+VERSION="${1:-${VERSION:-}}"
 
-if [ ! -d "$AUR_DIR" ]; then
-    echo "AUR directory not found: $AUR_DIR"
-    exit 1
+if [ -z "${VERSION}" ]; then
+  VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null || true)"
 fi
 
-cd "$AUR_DIR"
+if [ -z "${VERSION}" ]; then
+  echo "Version is not set. Pass it as arg, VERSION env, or create a tag first."
+  exit 1
+fi
 
-# Clean old build artifacts
+PKGVER="${VERSION#v}"
+
+if [ ! -d "${AUR_DIR}/.git" ]; then
+  git clone "${AUR_REPO_URL}" "${AUR_DIR}"
+fi
+
+cd "${AUR_DIR}"
+
+sed -E -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
+
 rm -rf lota/ src/ pkg/
-
-# Update .SRCINFO with new version
 makepkg --printsrcinfo > .SRCINFO
 
-# Commit and push to AUR
 git add PKGBUILD .SRCINFO
-git commit -m "upgpkg: lota ${VERSION}-1"
+
+if git diff --cached --quiet; then
+  echo "AUR is already up-to-date (${PKGVER})"
+  exit 0
+fi
+
+git commit -m "upgpkg: lota ${PKGVER}-1"
 git push origin master
 
-echo "AUR updated to version ${VERSION}"
+echo "AUR updated to version ${PKGVER}"

@@ -23,6 +23,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Checkout commit as main branch
+        run: git checkout -B main ${{ github.event.workflow_run.head_sha }}
+
       - name: Auto bump tag
         id: bump
         uses: cocogitto/cocogitto-action@v3

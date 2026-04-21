@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v1.6.3](https://github.com/quonaro/lota/compare/611cf93647a5a3a16a2342eb3eecce4ea5300ebe..v1.6.3) - 2026-04-21
+#### Bug Fixes
+- install.sh to match build.sh artifact naming - ([611cf93](https://github.com/quonaro/lota/commit/611cf93647a5a3a16a2342eb3eecce4ea5300ebe)) - quonaro
+
+- - -
+
 ## [Unreleased](https://github.com/quonaro/lota/compare/v1.6.1..HEAD)
 #### Bug Fixes
 - fix install.sh to match build.sh artifact naming (amd64/arm64 instead of x86_64/aarch64, remove .tar.gz extension) - (quonaro)

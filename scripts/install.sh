@@ -256,31 +256,6 @@ if [ -z "$INSTALL_DIR" ]; then
     esac
 fi
 
-# Check write permissions and configure sudo if needed
-SUDO=""
-if [ -d "$INSTALL_DIR" ]; then
-    if [ ! -w "$INSTALL_DIR" ]; then
-        if command -v sudo >/dev/null 2>&1; then
-            SUDO="sudo"
-            echo "${INFO} ${BOLD}Note: Installation to ${INSTALL_DIR} requires sudo privileges.${RESET}"
-        else
-            echo "${CROSS} ${BOLD}${RED}Error: ${INSTALL_DIR} is not writable and sudo is not available.${RESET}" >&2
-            exit 1
-        fi
-    fi
-else
-     PARENT_DIR=$(dirname "$INSTALL_DIR")
-     if [ -d "$PARENT_DIR" ] && [ ! -w "$PARENT_DIR" ]; then
-        if command -v sudo >/dev/null 2>&1; then
-            SUDO="sudo"
-            echo "${INFO} ${BOLD}Note: Creating ${INSTALL_DIR} requires sudo privileges.${RESET}"
-        else
-            echo "${CROSS} ${BOLD}${RED}Error: Cannot create ${INSTALL_DIR} (permission denied) and sudo is not available.${RESET}" >&2
-            exit 1
-        fi
-     fi
-fi
-
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
 # Print header
@@ -301,11 +276,6 @@ echo "   ${ARROW} Platform: ${BOLD}${PLATFORM}-${ARCHITECTURE}${RESET}"
 echo "   ${ARROW} Install scope: ${BOLD}${INSTALL_SCOPE}${RESET}"
 echo "   ${ARROW} Install directory: ${BOLD}${INSTALL_DIR}${RESET}"
 echo ""
-
-# Create install directory if it doesn't exist
-echo "${INFO} ${BOLD}Preparing installation...${RESET}"
-$SUDO mkdir -p "${INSTALL_DIR}"
-echo "   ${CHECK} Created install directory"
 
 # Download binary
 if [ "$VERSION" = "latest" ]; then
@@ -410,8 +380,38 @@ if [ -s "${CHECKSUM_FILE}" ]; then
     fi
 fi
 
-# Install binary
+# Check write permissions and configure sudo if needed (after verification, before install)
+SUDO=""
+if [ -d "$INSTALL_DIR" ]; then
+    if [ ! -w "$INSTALL_DIR" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+            echo "${INFO} ${BOLD}Note: Installation to ${INSTALL_DIR} requires sudo privileges.${RESET}"
+        else
+            echo "${CROSS} ${BOLD}${RED}Error: ${INSTALL_DIR} is not writable and sudo is not available.${RESET}" >&2
+            rm -rf "${TEMP_DIR}"
+            exit 1
+        fi
+    fi
+else
+     PARENT_DIR=$(dirname "$INSTALL_DIR")
+     if [ -d "$PARENT_DIR" ] && [ ! -w "$PARENT_DIR" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+            echo "${INFO} ${BOLD}Note: Creating ${INSTALL_DIR} requires sudo privileges.${RESET}"
+        else
+            echo "${CROSS} ${BOLD}${RED}Error: Cannot create ${INSTALL_DIR} (permission denied) and sudo is not available.${RESET}" >&2
+            rm -rf "${TEMP_DIR}"
+            exit 1
+        fi
+     fi
+fi
+
+# Create install directory if it doesn't exist
 echo "${INFO} ${BOLD}Installing binary...${RESET}"
+$SUDO mkdir -p "${INSTALL_DIR}"
+
+# Install binary
 $SUDO mv "${TEMP_FILE}" "${BINARY_PATH}"
 $SUDO chmod +x "${BINARY_PATH}"
 echo "   ${CHECK} Binary installed to ${BINARY_PATH}"

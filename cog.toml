@@ -3,18 +3,10 @@ from_latest_tag = true
 ignore_merge_commits = true
 ignore_fixup_commits = true
 disable_changelog = true
-disable_bump_commit = false
+disable_bump_commit = true
 branch_whitelist = ["main"]
 skip_ci = "[skip ci]"
 skip_untracked = false
-
-pre_bump_hooks = [
-  "go test ./...",
-  "sed -E -i 's|^var Version = \"[^\"]*\"$|var Version = \"{{version}}\"|' shared/constants.go",
-  "git add shared/constants.go",
-]
-
-post_bump_hooks = ["git push", "git push origin v{{version}}"]
 
 [git_hooks.commit-msg]
 script = "cog verify --file $1"

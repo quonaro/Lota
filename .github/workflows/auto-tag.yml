@@ -1,0 +1,36 @@
+name: Lota Auto Tag
+
+on:
+  workflow_run:
+    workflows: ["Lota CI & Release"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  auto_tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Auto bump tag
+        id: bump
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          release: true
+          git-user: github-actions[bot]
+          git-user-email: github-actions[bot]@users.noreply.github.com
+
+      - name: No release needed
+        if: ${{ steps.bump.outputs.version == '' }}
+        run: echo "No conventional commits requiring a new release tag"

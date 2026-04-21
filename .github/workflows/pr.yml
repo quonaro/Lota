@@ -2,6 +2,7 @@ name: PR Check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
 
 permissions:
@@ -37,28 +38,3 @@ jobs:
           cache: true
       - name: Run tests
         run: go test -v -race ./...
-
-  bump:
-    needs: [lint, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Checkout as main (cocogitto branch_whitelist workaround)
-        run: git checkout -B main ${{ github.event.pull_request.head.sha }}
-
-      - name: Auto bump tag
-        id: bump
-        uses: cocogitto/cocogitto-action@v3
-        with:
-          check: false
-          release: true
-          git-user: github-actions[bot]
-          git-user-email: github-actions[bot]@users.noreply.github.com
-
-      - name: No release needed
-        if: ${{ steps.bump.outputs.version == '' }}
-        run: echo "No conventional commits requiring a new release tag"

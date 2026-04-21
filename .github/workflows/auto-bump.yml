@@ -1,0 +1,33 @@
+name: Auto Bump Tag
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Auto bump tag
+        id: bump
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          check: false
+          release: true
+          git-user: github-actions[bot]
+          git-user-email: github-actions[bot]@users.noreply.github.com
+
+      - name: No release needed
+        if: ${{ steps.bump.outputs.version == '' }}
+        run: echo "No conventional commits requiring a new release tag"

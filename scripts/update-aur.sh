@@ -30,9 +30,11 @@ rm -rf lota/ src/ pkg/
 
 if [ "$(id -u)" = "0" ]; then
   useradd -M -s /bin/bash _build 2>/dev/null || true
-  chown -R _build:_build .
-  su _build -s /bin/bash -c "cd '$(pwd)' && makepkg --printsrcinfo" > .SRCINFO
-  chown -R root:root .
+  tmpdir=$(mktemp -d)
+  cp PKGBUILD "${tmpdir}/"
+  chown -R _build:_build "${tmpdir}"
+  su _build -s /bin/bash -c "cd '${tmpdir}' && makepkg --printsrcinfo" > .SRCINFO
+  rm -rf "${tmpdir}"
 else
   makepkg --printsrcinfo > .SRCINFO
 fi

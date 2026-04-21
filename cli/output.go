@@ -38,8 +38,6 @@ func PrintVersion() {
 	figure.NewFigure(shared.AppName, "slant", true).Print()
 	fmt.Println()
 	color.Cyan("version %s\n", shared.Version)
-	fmt.Printf("commit: %s\n", shared.Commit)
-	fmt.Printf("built at: %s\n", shared.BuildTime)
 }
 
 // printGlobalOptions prints the global options section

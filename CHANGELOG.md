@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [Unreleased](https://github.com/quonaro/lota/compare/v1.6.1..HEAD)
+#### Bug Fixes
+- fix install.sh to match build.sh artifact naming (amd64/arm64 instead of x86_64/aarch64, remove .tar.gz extension) - (quonaro)
+
+- - -
+## [v1.6.1](https://github.com/quonaro/lota/compare/v1.6.0..v1.6.1) - 2026-04-21
+
+- - -
 ## [v1.5.0](https://github.com/quonaro/lota/compare/fd263bf15328a8f47767ade734f6b756da0b6ab0..v1.5.0) - 2026-04-21
 #### Features
 - add installation script with checksums verification and interactive setup - ([f554fde](https://github.com/quonaro/lota/commit/f554fde028f8420501a6c09b89a65223ac41b142)) - quonaro

@@ -102,8 +102,8 @@ case "$OS" in
 esac
 
 case "$ARCH" in
-    x86_64)     ARCHITECTURE="x86_64" ;;
-    aarch64|arm64) ARCHITECTURE="aarch64" ;;
+    x86_64|amd64) ARCHITECTURE="amd64" ;;
+    aarch64|arm64) ARCHITECTURE="arm64" ;;
     *)          echo "${CROSS} ${BOLD}${RED}Error: Unsupported architecture: $ARCH${RESET}" >&2; exit 1 ;;
 esac
 
@@ -309,14 +309,22 @@ echo "   ${CHECK} Created install directory"
 
 # Download binary
 if [ "$VERSION" = "latest" ]; then
-    URL="https://github.com/${REPO}/releases/latest/download/lota-${PLATFORM}-${ARCHITECTURE}.tar.gz"
+    URL="https://github.com/${REPO}/releases/latest/download/lota-${PLATFORM}-${ARCHITECTURE}"
 else
-    URL="https://github.com/${REPO}/releases/download/v${VERSION}/lota-${PLATFORM}-${ARCHITECTURE}.tar.gz"
+    URL="https://github.com/${REPO}/releases/download/v${VERSION}/lota-${PLATFORM}-${ARCHITECTURE}"
+fi
+
+# Add .exe for Windows
+if [ "$PLATFORM" = "windows" ]; then
+    URL="${URL}.exe"
 fi
 
 # Download with curl or wget
 TEMP_DIR=$(mktemp -d)
-TEMP_FILE="${TEMP_DIR}/lota-${PLATFORM}-${ARCHITECTURE}.tar.gz"
+TEMP_FILE="${TEMP_DIR}/lota-${PLATFORM}-${ARCHITECTURE}"
+if [ "$PLATFORM" = "windows" ]; then
+    TEMP_FILE="${TEMP_FILE}.exe"
+fi
 CHECKSUM_FILE="${TEMP_DIR}/checksums.txt"
 
 echo ""
@@ -366,7 +374,7 @@ else
     exit 1
 fi
 
-# Verify downloaded file is a valid archive
+# Verify downloaded file is valid
 echo "${INFO} ${BOLD}Verifying download...${RESET}"
 if [ ! -s "${TEMP_FILE}" ]; then
     echo ""
@@ -376,35 +384,16 @@ if [ ! -s "${TEMP_FILE}" ]; then
     rm -rf "${TEMP_DIR}"
     exit 1
 fi
-
-# Check for gzip magic bytes
-if command -v od > /dev/null 2>&1; then
-    MAGIC_BYTES=$(od -An -tx1 -N2 "${TEMP_FILE}" 2>/dev/null | tr -d ' \n')
-    if [ "$MAGIC_BYTES" != "1f8b" ]; then
-        echo ""
-        echo "${CROSS} ${BOLD}${RED}Error: Downloaded file is not a valid gzip archive${RESET}" >&2
-        echo "   ${WARN} The release may not exist yet. Please check:" >&2
-        echo "      https://github.com/${REPO}/releases" >&2
-        rm -rf "${TEMP_DIR}"
-        exit 1
-    fi
-elif command -v file > /dev/null 2>&1; then
-    if ! file "${TEMP_FILE}" | grep -q "gzip\|archive"; then
-        echo ""
-        echo "${CROSS} ${BOLD}${RED}Error: Downloaded file is not a valid archive${RESET}" >&2
-        echo "   ${WARN} The release may not exist yet. Please check:" >&2
-        echo "      https://github.com/${REPO}/releases" >&2
-        rm -rf "${TEMP_DIR}"
-        exit 1
-    fi
-fi
-echo "   ${CHECK} Archive verified"
+echo "   ${CHECK} Download verified"
 
 # Verify checksum if available
 if [ -s "${CHECKSUM_FILE}" ]; then
     echo "${INFO} ${BOLD}Verifying checksum...${RESET}"
-    ARCHIVE_NAME="lota-${PLATFORM}-${ARCHITECTURE}.tar.gz"
-    EXPECTED_CHECKSUM=$(grep "${ARCHIVE_NAME}" "${CHECKSUM_FILE}" 2>/dev/null | awk '{print $1}')
+    BINARY_NAME="lota-${PLATFORM}-${ARCHITECTURE}"
+    if [ "$PLATFORM" = "windows" ]; then
+        BINARY_NAME="${BINARY_NAME}.exe"
+    fi
+    EXPECTED_CHECKSUM=$(grep "${BINARY_NAME}" "${CHECKSUM_FILE}" 2>/dev/null | awk '{print $1}')
     if [ -n "$EXPECTED_CHECKSUM" ] && command -v sha256sum > /dev/null 2>&1; then
         ACTUAL_CHECKSUM=$(sha256sum "${TEMP_FILE}" | awk '{print $1}')
         if [ "$EXPECTED_CHECKSUM" = "$ACTUAL_CHECKSUM" ]; then
@@ -421,31 +410,9 @@ if [ -s "${CHECKSUM_FILE}" ]; then
     fi
 fi
 
-# Extract archive
-echo "${INFO} ${BOLD}Extracting archive...${RESET}"
-cd "${TEMP_DIR}"
-if ! tar -xzf "${TEMP_FILE}" 2>/dev/null; then
-    echo ""
-    echo "${CROSS} ${BOLD}${RED}Error: Failed to extract archive${RESET}" >&2
-    echo "   ${WARN} The downloaded file may be corrupted" >&2
-    rm -rf "${TEMP_DIR}"
-    exit 1
-fi
-echo "   ${CHECK} Archive extracted"
-
-# Check if binary exists
-if [ ! -f "${BINARY_NAME}" ]; then
-    echo ""
-    echo "${CROSS} ${BOLD}${RED}Error: Binary '${BINARY_NAME}' not found in archive${RESET}" >&2
-    echo "   ${WARN} Archive contents:" >&2
-    ls -la "${TEMP_DIR}" >&2
-    rm -rf "${TEMP_DIR}"
-    exit 1
-fi
-
 # Install binary
 echo "${INFO} ${BOLD}Installing binary...${RESET}"
-$SUDO mv "${BINARY_NAME}" "${BINARY_PATH}"
+$SUDO mv "${TEMP_FILE}" "${BINARY_PATH}"
 $SUDO chmod +x "${BINARY_PATH}"
 echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
 

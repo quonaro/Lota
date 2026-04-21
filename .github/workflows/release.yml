@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. v1.2.3). Leave empty to auto-detect from commits.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -32,7 +37,10 @@ jobs:
       - name: Calculate next version
         id: version
         run: |
-          if ! NEW_TAG=$(cog bump --auto --dry-run); then
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            NEW_TAG="${{ github.event.inputs.version }}"
+            echo "Using manually specified version: ${NEW_TAG}"
+          elif ! NEW_TAG=$(cog bump --auto --dry-run); then
             echo "::error::No feat/fix/breaking commits found since last tag. Merge feature branches into main before releasing."
             exit 1
           fi
@@ -46,20 +54,18 @@ jobs:
           git tag -a ${{ steps.version.outputs.NEW_TAG }} -m "Release ${{ steps.version.outputs.NEW_TAG }}"
           git push origin ${{ steps.version.outputs.NEW_TAG }}
 
-      - name: Build binary
+      - name: Build binaries
         env:
-          NEW_TAG: ${{ steps.version.outputs.NEW_TAG }}
+          VERSION: ${{ steps.version.outputs.NEW_TAG }}
           COMMIT: ${{ github.sha }}
         run: |
-          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          mkdir -p dist
-          go build -ldflags "-X lota/shared.Version=${NEW_TAG} -X lota/shared.Commit=${COMMIT} -X lota/shared.BuildTime=${BUILD_TIME}" -o dist/lota
-          chmod +x dist/lota
+          chmod +x ./scripts/build.sh
+          ./scripts/build.sh
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/lota
+          files: dist/*
           tag_name: ${{ steps.version.outputs.NEW_TAG }}
           name: Release ${{ steps.version.outputs.NEW_TAG }}
           generate_release_notes: true

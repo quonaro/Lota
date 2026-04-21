@@ -1,0 +1,38 @@
+name: Lota Sync Version PR
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync_version_pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update shared version constant from tag
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_VERSION#v}"
+          sed -E -i 's|^var Version = "[^"]*"$|var Version = "'"${VERSION}"'"|' shared/constants.go
+
+      - name: Create pull request with version sync
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(version): sync shared version to ${{ github.ref_name }} [skip ci]"
+          title: "chore(version): sync shared version to ${{ github.ref_name }}"
+          body: "Auto-generated PR to sync shared/constants.go with release tag `${{ github.ref_name }}`."
+          branch: "chore/sync-version-${{ github.ref_name }}"
+          delete-branch: true
+          add-paths: |
+            shared/constants.go

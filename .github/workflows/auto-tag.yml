@@ -47,15 +47,6 @@ jobs:
           VERSION: ${{ steps.bump.outputs.version }}
         run: |
           sed -E -i 's|^var Version = "[^"]*"$|var Version = "'"${VERSION}"'"|' shared/constants.go
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add shared/constants.go
-          if git diff --cached --quiet; then
-            echo "shared/constants.go is already up to date"
-          else
-            git commit -m "chore(version): sync shared version to ${VERSION} [skip ci]"
-            git push origin HEAD:main
-          fi
 
       - name: No release needed
         if: ${{ steps.bump.outputs.version == '' }}
@@ -87,15 +78,6 @@ jobs:
           fi
 
           sed -E -i 's|^var Version = "[^"]*"$|var Version = "'"${PLAIN_VERSION}"'"|' shared/constants.go
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add shared/constants.go
-          if git diff --cached --quiet; then
-            echo "shared/constants.go is already up to date"
-          else
-            git commit -m "chore(version): sync shared version to ${PLAIN_VERSION} [skip ci]"
-            git push origin HEAD:main
-          fi
 
-          git tag "${VERSION}" HEAD
+          git tag "${VERSION}" main
           git push origin "${VERSION}"

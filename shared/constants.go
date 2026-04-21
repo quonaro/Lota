@@ -6,4 +6,4 @@ const (
 	AppDescription = "A declarative task runner for rapid development."
 )
 
-var Version = "1.7.0"
+var Version = "1.8.1"

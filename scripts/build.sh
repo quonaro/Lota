@@ -47,27 +47,8 @@ for target in "${TARGETS[@]}"; do
 done
 
 echo "-------------------------------------------"
-echo "Creating archives..."
-
-for target in "${TARGETS[@]}"; do
-  OS=$(echo "${target}" | awk '{print $1}')
-  ARCH=$(echo "${target}" | awk '{print $2}')
-
-  FILE_OS="${OS}"
-  [[ "${OS}" == "darwin" ]] && FILE_OS="macos"
-  BINARY_NAME="${BINARY}-${FILE_OS}-${ARCH}"
-  [[ "${OS}" == "windows" ]] && BINARY_NAME="${BINARY_NAME}.exe"
-
-  ARCHIVE="${OUTPUT_DIR}/${BINARY_NAME}.tar.gz"
-
-  printf "  %-10s %-8s -> %s\n" "${OS}" "${ARCH}" "${ARCHIVE}"
-
-  (cd "${OUTPUT_DIR}" && tar -czf "${BINARY_NAME}.tar.gz" "${BINARY_NAME}")
-done
-
-echo "-------------------------------------------"
 echo "Generating checksums..."
-(cd "${OUTPUT_DIR}" && sha256sum *.tar.gz > checksums.txt)
+(cd "${OUTPUT_DIR}" && sha256sum * > checksums.txt)
 echo "  checksums.txt"
 
 echo "-------------------------------------------"

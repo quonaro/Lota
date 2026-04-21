@@ -16,15 +16,36 @@ A declarative task runner for rapid development. Define commands in a YAML file 
 
 ## 📦 Installation
 
-```bash
-go install lota@latest
-```
-
-Or build from source:
+### Quick Install (Linux/macOS)
 
 ```bash
-go build -o lota .
+curl -fsSL https://raw.githubusercontent.com/quonaro/lota/main/scripts/install.sh | bash
 ```
+
+Or with specific version:
+```bash
+curl -fsSL https://raw.githubusercontent.com/quonaro/lota/main/scripts/install.sh | bash -s -- -V v0.1.0
+```
+
+Script auto-detects platform, verifies SHA256 checksum, and installs to `~/.local/bin` (or `/usr/local/bin` with sudo).
+
+### Build from Source
+
+Requires Go 1.26+
+
+```bash
+go install github.com/quonaro/lota@latest
+```
+
+Or manually:
+```bash
+git clone https://github.com/quonaro/lota.git
+cd lota && go build -o lota . && sudo mv lota /usr/local/bin/
+```
+
+### Windows
+
+Download binary from [GitHub Releases](https://github.com/quonaro/lota/releases) and add to PATH.
 
 ## 🚀 Quick Start
 

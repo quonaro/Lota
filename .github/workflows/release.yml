@@ -38,7 +38,8 @@ jobs:
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            NEW_TAG="${{ github.event.inputs.version }}"
+            INPUT_VERSION="${{ github.event.inputs.version }}"
+            NEW_TAG="v${INPUT_VERSION#v}"
             echo "Using manually specified version: ${NEW_TAG}"
           elif ! NEW_TAG=$(cog bump --auto --dry-run); then
             echo "::error::No feat/fix/breaking commits found since last tag. Merge feature branches into main before releasing."

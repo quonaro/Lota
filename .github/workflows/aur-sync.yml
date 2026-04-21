@@ -1,0 +1,32 @@
+name: AUR Sync
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  aur_sync:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: pacman -Syu --noconfirm git openssh base-devel
+      - uses: actions/checkout@v6
+      - name: Setup AUR SSH key
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
+            echo "AUR_SSH_PRIVATE_KEY is missing!" && exit 1
+          fi
+          mkdir -p ~/.ssh
+          echo "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+      - name: Update AUR
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          chmod +x ./scripts/update-aur.sh
+          ./scripts/update-aur.sh "${VERSION}"

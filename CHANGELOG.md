@@ -2,6 +2,22 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v1.4.0](https://github.com/quonaro/lota/compare/436e1518859eccd8b765e82e308cb0a699865443..v1.4.0) - 2026-04-20
+#### Features
+- add YAML file import support with prefix and section selection - ([43af8d7](https://github.com/quonaro/lota/commit/43af8d787434480cfd3830d429ebb035dd1f4e2c)) - quonaro
+#### Documentation
+- add hyperlink to LICENSE file in README - ([dc462cb](https://github.com/quonaro/lota/commit/dc462cb8af7f6eee5243ef0cd8c006de9bce0e45)) - quonaro
+- expand README with features, examples, and comprehensive usage guide - ([21a4f7b](https://github.com/quonaro/lota/commit/21a4f7b6870dfe7aa8a241b6ca912add8c241ae6)) - quonaro
+- redefine AI agent role from code writer to mentor in workspace rules - ([6c9ecb4](https://github.com/quonaro/lota/commit/6c9ecb48a9d99e9d2ca77d900bf0c805586a029a)) - quonaro
+#### Refactoring
+- improve flag handling in command resolution and remove filterGlobalFlags - ([bfe5e6d](https://github.com/quonaro/lota/commit/bfe5e6d36ed02ee6890289d1aeef1c5d61ecf229)) - quonaro
+#### Miscellaneous Chores
+- remove Windsurf AI workspace rules and ignore AI agent directories - ([316b3c8](https://github.com/quonaro/lota/commit/316b3c827aee0e868991a6a50b824e197fb77a3e)) - quonaro
+- add Windsurf AI development protocol and improve help system with verbose mode - ([e6a7836](https://github.com/quonaro/lota/commit/e6a78364b054ffe5d6fd7f8412c58d47fa5c012a)) - quonaro
+- update changelog for v1.3.0 - ([436e151](https://github.com/quonaro/lota/commit/436e1518859eccd8b765e82e308cb0a699865443)) - quonaro
+
+- - -
+
 ## [v1.3.0](https://github.com/quonaro/lota/compare/5de88d377cbc69336252aa9112d747b6ac3d0e77..v1.3.0) - 2026-04-13
 #### Features
 - rename darwin to macos in build output filenames - ([c49afe2](https://github.com/quonaro/lota/commit/c49afe20fa6b32c9a0a535eff0d0d181772f5515)) - quonaro

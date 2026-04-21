@@ -11,6 +11,7 @@ A declarative task runner for rapid development. Define commands in a YAML file 
 - 👁️ **Dry-run mode** - Preview commands before execution
 - 🛡️ **Graceful shutdown** - Proper process management on interrupt signals
 - 📄 **Env file imports** - Load variables from .env files
+- 📊 **YAML config imports** - Import nested YAML configs with dot-notation access
 - 📂 **Nested groups** - Organize commands in hierarchical groups
 
 ## 📦 Installation
@@ -217,6 +218,7 @@ shell: bash
 vars:
   - !import:env .env.local
   - !import:env .env.shared
+  - !import:yaml config/secrets.yaml@public app  # Import public config section
 
 args:
   - environment|env:str=dev
@@ -314,6 +316,50 @@ vars:
   - !import:env .env
   - !import:env config/prod.env
 ```
+
+#### 📊 Import from YAML files
+
+Import nested YAML configurations with automatic flattening to dot-notation:
+
+```yaml
+vars:
+  - !import:yaml config.yaml          # Import all with original keys
+  - !import:yaml config.yaml app     # Import all with 'app.' prefix
+  - !import:yaml config.yaml@public   # Import only 'public' section
+  - !import:yaml secrets.yaml@db cfg # Import 'db' section with 'cfg.' prefix
+```
+
+**Syntax:** `!import:yaml <file>[@<section>] [<prefix>]`
+
+- **file** - Path to YAML file
+- **section** (optional) - Import only specific top-level section via `@section`
+- **prefix** (optional) - Add prefix to all imported keys
+
+**Example YAML file:**
+```yaml
+# config.yaml
+public:
+  app_name: MyApp
+  version: 1.0.0
+  database:
+    host: localhost
+    port: 5432
+
+private:
+  api_key: secret123
+```
+
+**Resulting variables:**
+```yaml
+# !import:yaml config.yaml@public app
+vars:
+  app.app_name: "MyApp"
+  app.version: "1.0.0"
+  app.database.host: "localhost"
+  app.database.port: "5432"
+```
+
+Access in scripts: `{{app.app_name}}`, `{{app.database.host}}`
 
 ### 🎯 Arguments (`args`)
 

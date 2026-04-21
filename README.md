@@ -551,6 +551,69 @@ Preview what would be executed without actually running it:
 lota build --dry-run
 ```
 
+## 👨‍💻 Development
+
+### Prerequisites
+
+- Go 1.26+
+- Python 3.8+ (for pre-commit)
+- cocogitto (cog) - for conventional commits
+
+### Setup Git Hooks
+
+Install git hooks for commit validation and code quality:
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install git hooks
+./scripts/install-hooks.sh
+```
+
+This installs:
+- **commit-msg hook** - validates conventional commits via cocogitto
+- **post-commit hook** - automatic version tagging
+- **pre-commit hooks** - runs go fmt, go vet, go test, and golangci-lint
+
+### Manual Pre-commit
+
+Run pre-commit manually without committing:
+
+```bash
+# Run all hooks
+pre-commit run --all-files
+
+# Run specific hook
+pre-commit run go-fmt --all-files
+```
+
+### Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with race detector
+go test -race ./...
+
+# Run with coverage
+go test -cover ./...
+```
+
+### Linting
+
+```bash
+# Run golangci-lint
+golangci-lint run
+
+# Run go vet
+go vet ./...
+
+# Format code
+gofmt -w -s .
+```
+
 ## 🏗️ Architecture
 
 Lota follows a strict layered architecture:

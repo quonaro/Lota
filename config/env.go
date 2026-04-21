@@ -41,7 +41,11 @@ func loadEnvironmentFile(basePath, path, format, prefix string) ([]Var, error) {
 	if err != nil {
 		return nil, fmt.Errorf("env file not found: %s", fullPath)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	var vars []Var
 	scanner := bufio.NewScanner(file)

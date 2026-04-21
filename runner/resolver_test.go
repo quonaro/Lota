@@ -164,7 +164,6 @@ func TestResolveVars(t *testing.T) {
 	}
 }
 
-
 func TestResolveArgs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -228,7 +227,6 @@ func TestResolveArgs(t *testing.T) {
 		})
 	}
 }
-
 
 func argsSlicesEqual(a, b []config.Arg) bool {
 	if len(a) != len(b) {

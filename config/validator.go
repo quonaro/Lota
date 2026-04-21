@@ -37,7 +37,7 @@ func (c ConfigValidator) Validate() ValidationResult {
 	}
 
 	// Build indexes
-	if err := c.AppConfig.BuildIndexes(); err != nil {
+	if err := c.BuildIndexes(); err != nil {
 		result.Error = err
 		return result
 	}

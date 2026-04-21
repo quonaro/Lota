@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-
 func TestParseGlobalFlags(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -148,12 +147,12 @@ func TestResolveCommand(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		args           []string
-		expectExists   bool
-		expectCommand  bool
-		expectGroups   int
-		expectRemain   []string
+		name          string
+		args          []string
+		expectExists  bool
+		expectCommand bool
+		expectGroups  int
+		expectRemain  []string
 	}{
 		{
 			name:         "empty input",
@@ -264,4 +263,3 @@ func TestResolveCommand(t *testing.T) {
 		})
 	}
 }
-

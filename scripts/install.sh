@@ -123,7 +123,7 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$LOTA_NONINTERACTIVE" ]; then
                 API_RESPONSE=$(curl -s -w "\n%{http_code}" "https://api.github.com/repos/${REPO}/releases?per_page=20")
                 HTTP_CODE=$(echo "$API_RESPONSE" | tail -n1)
                 BODY=$(echo "$API_RESPONSE" | sed '$d')
-                
+
                 if [ "$HTTP_CODE" = "403" ] || [ "$HTTP_CODE" = "429" ]; then
                     echo "${WARN} GitHub API rate limit exceeded (HTTP $HTTP_CODE)."
                     echo "${INFO} You can still enter a version manually."
@@ -137,32 +137,32 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$LOTA_NONINTERACTIVE" ]; then
                 elif [ -n "$BODY" ]; then
                     TAGS=$(echo "$BODY" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
                 fi
-                
+
                 if [ -n "$TAGS" ]; then
                     echo "${INFO} Available versions:"
-                    
+
                     TOTAL_LINES=$(echo "$TAGS" | wc -l)
                     CURRENT_LINE=1
                     PAGE_SIZE=5
-                    
+
                     while true; do
                         END_LINE=$((CURRENT_LINE + PAGE_SIZE - 1))
-                        
+
                         echo "$TAGS" | sed -n "${CURRENT_LINE},${END_LINE}p" | while read -r line; do
                             echo "   - ${BOLD}$line${RESET}"
                         done
-                        
+
                         REMAINING=$((TOTAL_LINES - END_LINE))
-                        
+
                         echo ""
                         if [ "$REMAINING" -gt 0 ]; then
                             printf "${INFO} Enter version (or press 'm' to see more): "
                         else
                              printf "${INFO} Enter version: "
                         fi
-                        
+
                         read -r V_INPUT < "$INPUT_SOURCE"
-                        
+
                         if [ "$V_INPUT" = "m" ] && [ "$REMAINING" -gt 0 ]; then
                             CURRENT_LINE=$((END_LINE + 1))
                             continue
@@ -200,19 +200,19 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$LOTA_NONINTERACTIVE" ]; then
     echo ""
     echo "${INFO} ${BOLD}Choose installation location:${RESET}"
     echo "   1) User   (${HOME}/.local/bin) [Default]"
-    
+
     if [ "$PLATFORM" = "macos" ]; then
         SYSTEM_PATH="/usr/local/bin"
     else
         SYSTEM_PATH="/usr/local/bin"
     fi
-    
+
     echo "   2) System (${SYSTEM_PATH})"
     echo "   3) Custom"
-    
+
     printf "${INFO} Enter selection [1]: "
     read -r REPLY < "$INPUT_SOURCE"
-    
+
     case "$REPLY" in
         2)
             INSTALL_DIR="${SYSTEM_PATH}"
@@ -429,14 +429,14 @@ PATH_EXPORT="export PATH=\"\${HOME}/.local/bin:\${PATH}\""
 
 if ! echo "${PATH}" | grep -Eq "(^|:)${HOME}/\.local/bin(:|$)"; then
     echo "${INFO} ${BOLD}Configuring PATH...${RESET}"
-    
+
     export PATH="${HOME}/.local/bin:${PATH}"
     echo "   ${CHECK} Added to PATH for current session"
-    
+
     ADDED_TO_CONFIG=0
     CONFIG_FILES_ADDED=()
     RELOAD_CMDS=()
-    
+
     # Check and add to .zshrc
     if [ -f "${HOME}/.zshrc" ]; then
         if ! grep -Eq "(PATH.*)${HOME}/\.local/bin" "${HOME}/.zshrc" 2>/dev/null; then
@@ -452,7 +452,7 @@ if ! echo "${PATH}" | grep -Eq "(^|:)${HOME}/\.local/bin(:|$)"; then
             ADDED_TO_CONFIG=1
         fi
     fi
-    
+
     # Check and add to .bashrc
     if [ -f "${HOME}/.bashrc" ]; then
         if ! grep -Eq "(PATH.*)${HOME}/\.local/bin" "${HOME}/.bashrc" 2>/dev/null; then
@@ -468,7 +468,7 @@ if ! echo "${PATH}" | grep -Eq "(^|:)${HOME}/\.local/bin(:|$)"; then
             ADDED_TO_CONFIG=1
         fi
     fi
-    
+
     # Check and add to .bash_profile
     if [ -f "${HOME}/.bash_profile" ]; then
         if ! grep -Eq "(PATH.*)${HOME}/\.local/bin" "${HOME}/.bash_profile" 2>/dev/null; then
@@ -484,7 +484,7 @@ if ! echo "${PATH}" | grep -Eq "(^|:)${HOME}/\.local/bin(:|$)"; then
             ADDED_TO_CONFIG=1
         fi
     fi
-    
+
     # Check and add to fish config
     if command -v fish > /dev/null 2>&1; then
         FISH_CONFIG_DIR="${HOME}/.config/fish"
@@ -507,7 +507,7 @@ if ! echo "${PATH}" | grep -Eq "(^|:)${HOME}/\.local/bin(:|$)"; then
             fi
         fi
     fi
-    
+
     # Check and add to .profile as fallback
     if [ $ADDED_TO_CONFIG -eq 0 ]; then
         PROFILE_FILE="${HOME}/.profile"
@@ -533,7 +533,7 @@ if ! echo "${PATH}" | grep -Eq "(^|:)${HOME}/\.local/bin(:|$)"; then
             ADDED_TO_CONFIG=1
         fi
     fi
-    
+
     if [ $ADDED_TO_CONFIG -eq 1 ]; then
         echo ""
         if [ ${#CONFIG_FILES_ADDED[@]} -gt 0 ]; then

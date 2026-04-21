@@ -241,42 +241,6 @@ func PrintGroupHelp(group *config.Group, verbose bool) {
 	}
 }
 
-func describeArg(arg config.Arg) string {
-	if arg.Wildcard {
-		return "Wildcard argument (captures all remaining args)"
-	}
-	if arg.Type == "bool" {
-		return "Boolean flag"
-	}
-	if arg.Type == "arr" {
-		return "Array argument"
-	}
-	return "Argument"
-}
-
-
-// collectGroupArgs collects arguments defined at group level (excluding overridden by inner groups)
-func collectGroupArgs(groups []*config.Group) []config.Arg {
-	if len(groups) == 0 {
-		return nil
-	}
-
-	// Collect all group args, with inner groups overriding outer ones
-	seen := make(map[string]bool)
-	var result []config.Arg
-
-	for i := len(groups) - 1; i >= 0; i-- {
-		for _, arg := range groups[i].Args {
-			if !seen[arg.Name] {
-				seen[arg.Name] = true
-				result = append([]config.Arg{arg}, result...)
-			}
-		}
-	}
-
-	return result
-}
-
 // determineArgScope determines where an argument was originally defined
 func determineArgScope(arg config.Arg, cfg config.AppConfig, groups []*config.Group, cmd config.Command) string {
 	// Check command level first (highest priority)
@@ -304,7 +268,6 @@ func determineArgScope(arg config.Arg, cfg config.AppConfig, groups []*config.Gr
 
 	return "Unknown"
 }
-
 
 // separateArgs separates arguments into positional and flag arguments
 func separateArgs(args []config.Arg) (positionalArgs, flagArgs []config.Arg) {
@@ -370,5 +333,3 @@ func printOptionVerbose(arg config.Arg, scope string) {
 
 	fmt.Printf("  %s [from: %s]\n", flagStr, scope)
 }
-
-

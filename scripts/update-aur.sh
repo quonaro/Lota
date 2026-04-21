@@ -27,7 +27,13 @@ sed -E -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
 sed -E -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
 rm -rf lota/ src/ pkg/
-makepkg --printsrcinfo > .SRCINFO
+
+if [ "$(id -u)" = "0" ]; then
+  useradd -M -s /bin/sh _build 2>/dev/null || true
+  su _build -s /bin/sh -c "cd $(pwd) && makepkg --printsrcinfo" > .SRCINFO
+else
+  makepkg --printsrcinfo > .SRCINFO
+fi
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"

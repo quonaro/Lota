@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"lota/config"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -27,6 +28,27 @@ type InterpolationContext struct {
 	ArgDefs []config.Arg // Argument definitions for type-aware interpolation
 }
 
+// findSimilarVars finds variables with similar prefix to help users debug
+func findSimilarVars(placeholder string, vars map[string]string) []string {
+	// Extract prefix (first part before dot, or entire placeholder if no dot)
+	prefix := placeholder
+	if idx := strings.Index(placeholder, "."); idx != -1 {
+		prefix = placeholder[:idx]
+	}
+
+	// Find all vars that start with the prefix
+	var similar []string
+	for name := range vars {
+		if strings.HasPrefix(name, prefix+".") || name == prefix {
+			similar = append(similar, name)
+		}
+	}
+
+	// Sort for deterministic output
+	sort.Strings(similar)
+	return similar
+}
+
 // Interpolate replaces variable and argument placeholders in script with their values.
 // Supports type-aware interpolation and validation.
 func Interpolate(script string, context InterpolationContext) (string, error) {
@@ -39,14 +61,19 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 	for _, placeholder := range placeholders {
 		value, err := interpolatePlaceholder(placeholder, context)
 		if err != nil {
-			errors = append(errors, placeholder)
+			similar := findSimilarVars(placeholder, context.Vars)
+			if len(similar) > 0 {
+				errors = append(errors, fmt.Sprintf("%s not found. Available vars with '%s': %s", placeholder, placeholder, strings.Join(similar, ", ")))
+			} else {
+				errors = append(errors, fmt.Sprintf("%s is required", placeholder))
+			}
 			continue
 		}
 		result = strings.ReplaceAll(result, "{{"+placeholder+"}}", value)
 	}
 
 	if len(errors) > 0 {
-		return "", fmt.Errorf("%s is required, check --help for more information", strings.Join(errors, ", "))
+		return "", fmt.Errorf("%s. Check --help for more information", strings.Join(errors, "; "))
 	}
 
 	return result, nil

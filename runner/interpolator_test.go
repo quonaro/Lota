@@ -5,6 +5,66 @@ import (
 	"testing"
 )
 
+func TestFindSimilarVars(t *testing.T) {
+	tests := []struct {
+		name        string
+		placeholder string
+		vars        map[string]string
+		expected    []string
+	}{
+		{
+			name:        "find similar with dot prefix",
+			placeholder: "config.public.app_name",
+			vars: map[string]string{
+				"config.database.host": "localhost",
+				"config.database.port": "5432",
+				"config.app_name":      "MyApp",
+			},
+			expected: []string{"config.app_name", "config.database.host", "config.database.port"},
+		},
+		{
+			name:        "no similar vars",
+			placeholder: "unknown.var",
+			vars: map[string]string{
+				"other.value": "test",
+			},
+			expected: []string{},
+		},
+		{
+			name:        "exact match",
+			placeholder: "config",
+			vars: map[string]string{
+				"config": "value",
+			},
+			expected: []string{"config"},
+		},
+		{
+			name:        "no dot in placeholder",
+			placeholder: "simple",
+			vars: map[string]string{
+				"simple.value": "test",
+				"simple.other": "test2",
+			},
+			expected: []string{"simple.other", "simple.value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findSimilarVars(tt.placeholder, tt.vars)
+			if len(result) != len(tt.expected) {
+				t.Errorf("findSimilarVars() = %v, want %v", result, tt.expected)
+				return
+			}
+			for i, v := range result {
+				if v != tt.expected[i] {
+					t.Errorf("findSimilarVars()[%d] = %v, want %v", i, v, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
 func TestInterpolate(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -45,6 +105,19 @@ func TestInterpolate(t *testing.T) {
 			script: "echo {{missing}}",
 			context: InterpolationContext{
 				Vars: map[string]string{},
+				Args: map[string]string{},
+			},
+			wantErr: true,
+		},
+		{
+			name:   "missing placeholder with similar vars",
+			script: "echo {{config.public.app_name}}",
+			context: InterpolationContext{
+				Vars: map[string]string{
+					"config.database.host": "localhost",
+					"config.database.port": "5432",
+					"config.app_name":      "MyApp",
+				},
 				Args: map[string]string{},
 			},
 			wantErr: true,

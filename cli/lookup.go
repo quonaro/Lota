@@ -10,7 +10,7 @@ import (
 )
 
 // LoadConfig loads and indexes the configuration.
-// configPath can be empty (uses default lota.yml), a file path, or a directory.
+// configPath can be empty (uses default lota.yml or lota.yaml), a file path, or a directory.
 func LoadConfig(configPath string) (*config.AppConfig, error) {
 	fc, err := config.GetConfigPath(configPath)
 	if err != nil {

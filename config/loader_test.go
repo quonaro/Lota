@@ -105,17 +105,70 @@ func TestCurrentDir(t *testing.T) {
 }
 
 func TestGetConfig_EmptyPath(t *testing.T) {
-	config, err := GetConfigPath("")
-	if err != nil {
-		t.Fatalf("GetConfigPath(empty) failed: %v", err)
+	_, err := GetConfigPath("")
+	if err == nil {
+		t.Error("GetConfigPath(empty) should fail when no config file exists")
+	}
+}
+
+func TestFindConfigFile_Priority(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Test .yml priority when both exist
+	ymlPath := filepath.Join(tempDir, shared.ConfigFileName)
+	yamlPath := filepath.Join(tempDir, shared.ConfigFileNameYAML)
+
+	if err := os.WriteFile(ymlPath, []byte("yml"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(yamlPath, []byte("yaml"), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	currentDir, err := CurrentDir()
+	result, err := findConfigFile(tempDir)
 	if err != nil {
-		t.Fatalf("CurrentDir() error: %v", err)
+		t.Fatalf("findConfigFile() failed: %v", err)
 	}
-	expectedPath := filepath.Join(currentDir, shared.ConfigFileName)
-	if config.Path != expectedPath {
-		t.Errorf("GetConfigPath(empty) = %v, want %v", config.Path, expectedPath)
+	if result != ymlPath {
+		t.Errorf("findConfigFile() = %v, want %v (yml priority)", result, ymlPath)
+	}
+
+	// Clean up and test only .yaml exists
+	if err := os.Remove(ymlPath); err != nil {
+		t.Fatal(err)
+	}
+	result, err = findConfigFile(tempDir)
+	if err != nil {
+		t.Fatalf("findConfigFile() with only yaml failed: %v", err)
+	}
+	if result != yamlPath {
+		t.Errorf("findConfigFile() = %v, want %v", result, yamlPath)
+	}
+
+	// Test neither exists
+	if err := os.Remove(yamlPath); err != nil {
+		t.Fatal(err)
+	}
+	_, err = findConfigFile(tempDir)
+	if err == nil {
+		t.Error("findConfigFile() should fail when neither file exists")
+	}
+}
+
+func TestGetConfigPath_YamlExtension(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create only .yaml file
+	yamlPath := filepath.Join(tempDir, shared.ConfigFileNameYAML)
+	if err := os.WriteFile(yamlPath, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := GetConfigPath(tempDir)
+	if err != nil {
+		t.Fatalf("GetConfigPath() failed: %v", err)
+	}
+	if config.Path != yamlPath {
+		t.Errorf("GetConfigPath() = %v, want %v", config.Path, yamlPath)
 	}
 }

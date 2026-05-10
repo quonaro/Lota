@@ -27,15 +27,43 @@ func CurrentDir() (string, error) {
 	return dir, nil
 }
 
+func findConfigFile(dir string) (string, error) {
+	// Try .yml first (backward compatibility)
+	ymlPath := filepath.Join(dir, shared.ConfigFileName)
+	if _, err := os.Stat(ymlPath); err == nil {
+		return ymlPath, nil
+	}
+
+	// Try .yaml
+	yamlPath := filepath.Join(dir, shared.ConfigFileNameYAML)
+	if _, err := os.Stat(yamlPath); err == nil {
+		return yamlPath, nil
+	}
+
+	// Neither exists
+	return "", fmt.Errorf("no config file found (tried %s and %s)", shared.ConfigFileName, shared.ConfigFileNameYAML)
+}
+
 func GetConfigPath(path string) (*FileConfig, error) {
 	if path == "" {
 		dir, err := CurrentDir()
 		if err != nil {
 			return nil, err
 		}
-		path = filepath.Join(dir, shared.ConfigFileName)
-	} else if isDir(path) {
-		path = filepath.Join(path, shared.ConfigFileName)
+		configPath, err := findConfigFile(dir)
+		if err != nil {
+			return nil, err
+		}
+		return &FileConfig{Path: configPath}, nil
 	}
+
+	if isDir(path) {
+		configPath, err := findConfigFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return &FileConfig{Path: configPath}, nil
+	}
+
 	return &FileConfig{Path: path}, nil
 }

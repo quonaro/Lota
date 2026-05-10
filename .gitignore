@@ -37,6 +37,7 @@ env.*
 # Project-specific
 lota
 lota.yml
+lota.yaml
 
 # Tools
 .agent

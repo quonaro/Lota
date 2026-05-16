@@ -7,12 +7,13 @@ import (
 
 // GlobalFlags represents global CLI flags
 type GlobalFlags struct {
-	Help    bool
-	Verbose bool
-	Version bool
-	DryRun  bool
-	Init    bool
-	Config  string
+	Help             bool
+	Verbose          bool
+	Version          bool
+	DryRun           bool
+	Init             bool
+	Config           string
+	CompletionScript string
 }
 
 // ParseGlobalFlags parses global flags from CLI arguments.
@@ -49,6 +50,12 @@ func ParseGlobalFlags(args []string) (GlobalFlags, []string, error) {
 			}
 			i++
 			flags.Config = args[i]
+		case "--completion-script":
+			if i+1 >= len(args) {
+				return GlobalFlags{}, nil, fmt.Errorf("flag --completion-script requires a value")
+			}
+			i++
+			flags.CompletionScript = args[i]
 		default:
 			known = false
 		}
@@ -88,8 +95,11 @@ func hasVerboseFlag(args []string) bool {
 
 // validateFlags checks for conflicting flag combinations
 func validateFlags(flags GlobalFlags) error {
-	if flags.Init && (flags.Help || flags.Version || flags.Verbose || flags.DryRun) {
-		return fmt.Errorf("--init cannot be used with --help, --version, --verbose, or --dry-run")
+	if flags.Init && (flags.Help || flags.Version || flags.Verbose || flags.DryRun || flags.CompletionScript != "") {
+		return fmt.Errorf("--init cannot be used with --help, --version, --verbose, --dry-run, or --completion-script")
+	}
+	if flags.CompletionScript != "" && (flags.Help || flags.Version || flags.Init || flags.Verbose || flags.DryRun) {
+		return fmt.Errorf("--completion-script cannot be used with --help, --version, --init, --verbose, or --dry-run")
 	}
 	return nil
 }
@@ -110,6 +120,13 @@ func HandleGlobalFlags(flags GlobalFlags) (bool, error) {
 
 	if flags.Init {
 		if err := InitConfig(flags.Config); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+
+	if flags.CompletionScript != "" {
+		if err := PrintCompletionScript(flags.CompletionScript); err != nil {
 			return true, err
 		}
 		return true, nil

@@ -9,6 +9,12 @@ import (
 
 // Run executes the CLI application
 func Run() error {
+	// Check for shell completion mode first (posener/complete reads COMP_LINE and COMP_POINT)
+	if os.Getenv("COMP_LINE") != "" {
+		RunCompletion()
+		return nil
+	}
+
 	if len(os.Args) < 2 {
 		PrintHelp("")
 		return nil

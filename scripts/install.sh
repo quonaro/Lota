@@ -560,6 +560,42 @@ else
     echo ""
 fi
 
+# Configure shell completions
+echo ""
+echo "${INFO} ${BOLD}Configuring shell completions...${RESET}"
+
+for shell in bash zsh fish; do
+    case "$shell" in
+        bash)
+            config_file="${HOME}/.bashrc"
+            ;;
+        zsh)
+            config_file="${HOME}/.zshrc"
+            ;;
+        fish)
+            config_file="${HOME}/.config/fish/config.fish"
+            ;;
+    esac
+
+    if [ "$shell" = "fish" ] && ! command -v fish > /dev/null 2>&1; then
+        continue
+    fi
+
+    if [ -f "$config_file" ] || ([ "$shell" = "fish" ] && mkdir -p "$(dirname "$config_file")" 2>/dev/null && touch "$config_file"); then
+        if ! grep -q "# Lota shell completion" "$config_file" 2>/dev/null; then
+            script_output=$("${BINARY_PATH}" --completion-script "$shell" 2>/dev/null)
+            if [ -n "$script_output" ]; then
+                echo "" >> "$config_file"
+                echo "# Lota shell completion" >> "$config_file"
+                echo "$script_output" >> "$config_file"
+                echo "   ${CHECK} Added ${shell} completion to ${config_file}"
+            fi
+        else
+            echo "   ${CHECK} ${shell} completion already configured"
+        fi
+    fi
+done
+
 # Success message
 echo ""
 if [ "$HAS_COLORS" = "1" ]; then
@@ -572,4 +608,5 @@ else
 fi
 echo ""
 echo "   Run ${BOLD}lota --version${RESET} to verify installation."
+echo "   Run ${BOLD}lota <TAB>${RESET} to try tab completion."
 echo ""

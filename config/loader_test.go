@@ -105,7 +105,17 @@ func TestCurrentDir(t *testing.T) {
 }
 
 func TestGetConfig_EmptyPath(t *testing.T) {
-	_, err := GetConfigPath("")
+	tempDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	_, err = GetConfigPath("")
 	if err == nil {
 		t.Error("GetConfigPath(empty) should fail when no config file exists")
 	}
@@ -152,6 +162,55 @@ func TestFindConfigFile_Priority(t *testing.T) {
 	_, err = findConfigFile(tempDir)
 	if err == nil {
 		t.Error("findConfigFile() should fail when neither file exists")
+	}
+}
+
+func TestFindConfigFile_UpwardSearch(t *testing.T) {
+	root := t.TempDir()
+	subDir := filepath.Join(root, "sub")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := filepath.Join(root, shared.ConfigFileName)
+	if err := os.WriteFile(configPath, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := findConfigFile(subDir)
+	if err != nil {
+		t.Fatalf("findConfigFile() failed: %v", err)
+	}
+	if result != configPath {
+		t.Errorf("findConfigFile() = %v, want %v", result, configPath)
+	}
+}
+
+func TestFindConfigFile_StopsAtGitRoot(t *testing.T) {
+	root := t.TempDir()
+	subDir := filepath.Join(root, "sub")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create .git in root
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create config ABOVE git root (should not be found)
+	parentDir := filepath.Dir(root)
+	parentConfig := filepath.Join(parentDir, shared.ConfigFileName)
+	if err := os.WriteFile(parentConfig, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure cleanup of parent config
+	t.Cleanup(func() { _ = os.Remove(parentConfig) })
+
+	_, err := findConfigFile(subDir)
+	if err == nil {
+		t.Error("findConfigFile() should fail when config is above git root")
 	}
 }
 

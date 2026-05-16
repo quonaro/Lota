@@ -5,6 +5,7 @@ import (
 	"lota/shared"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type FileConfig struct {
@@ -28,20 +29,36 @@ func CurrentDir() (string, error) {
 }
 
 func findConfigFile(dir string) (string, error) {
-	// Try .yml first (backward compatibility)
-	ymlPath := filepath.Join(dir, shared.ConfigFileName)
-	if _, err := os.Stat(ymlPath); err == nil {
-		return ymlPath, nil
+	var checked []string
+	for {
+		// Try .yml first (backward compatibility)
+		ymlPath := filepath.Join(dir, shared.ConfigFileName)
+		if _, err := os.Stat(ymlPath); err == nil {
+			return ymlPath, nil
+		}
+
+		// Try .yaml
+		yamlPath := filepath.Join(dir, shared.ConfigFileNameYAML)
+		if _, err := os.Stat(yamlPath); err == nil {
+			return yamlPath, nil
+		}
+
+		checked = append(checked, dir)
+
+		// Stop at git root
+		gitPath := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitPath); err == nil {
+			break
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
-	// Try .yaml
-	yamlPath := filepath.Join(dir, shared.ConfigFileNameYAML)
-	if _, err := os.Stat(yamlPath); err == nil {
-		return yamlPath, nil
-	}
-
-	// Neither exists
-	return "", fmt.Errorf("no config file found (tried %s and %s)", shared.ConfigFileName, shared.ConfigFileNameYAML)
+	return "", fmt.Errorf("no config file found (checked: %s)", strings.Join(checked, ", "))
 }
 
 func GetConfigPath(path string) (*FileConfig, error) {

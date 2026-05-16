@@ -13,6 +13,9 @@ A declarative task runner for rapid development. Define commands in a YAML file 
 - 📄 **Env file imports** - Load variables from .env files
 - 📊 **YAML config imports** - Import nested YAML configs with dot-notation access
 - 📂 **Nested groups** - Organize commands in hierarchical groups
+- 📁 **Working directory** - Set `dir` per command or group (relative to `lota.yml`)
+- 🔗 **Command dependencies** - `depends` for automatic prerequisite execution with cycle detection
+- 🔍 **Upward config search** - Find `lota.yml` in parent directories up to the git root
 
 ## 📦 Installation
 
@@ -491,6 +494,49 @@ dev:
 
 Supported shells: bash, sh, zsh, dash, ksh, mksh, pdksh, ash, busybox, sash, tcsh, csh, fish, powershell.exe, pwsh, powershell, cmd, cmd.exe
 
+### 📁 Working Directory (`dir`)
+
+Set the working directory for commands and groups. The path is resolved relative to the `lota.yml` file location.
+
+```yaml
+backend:
+  dir: ./backend          # group-level default
+  build:
+    desc: Build backend
+    script: go build .
+  test:
+    desc: Run backend tests
+    dir: ./backend/tests  # command-level override
+    script: go test ./...
+```
+
+Priority: **command > group > cwd**. Useful in monorepos where different commands run in different subprojects.
+
+### 🔗 Command Dependencies (`depends`)
+
+Reference other commands that must run before the current one. Dependencies are specified as full dot-separated paths.
+
+```yaml
+build:
+  desc: Build the application
+  script: go build -o bin/app .
+
+test:
+  desc: Run tests
+  depends:
+    - build
+  script: go test ./...
+
+deploy:
+  desc: Deploy to production
+  depends:
+    - build
+    - test
+  script: ./deploy.sh
+```
+
+Dependencies execute with **their own context** (shell, vars, dir, default args). Circular dependencies are detected automatically and produce an error.
+
 ### ⚡ Hooks (`before` / `after`)
 
 ```yaml
@@ -536,6 +582,17 @@ lota infra k8s apply
 | `--dry-run` | Show commands without executing |
 | `--init` | Create a template lota.yml |
 | `--config` | Specify config file or directory |
+
+## 🔍 Upward Config Search
+
+If `lota.yml` is not found in the current directory, Lota searches upward through parent directories until it finds one or reaches the git root (`.git` directory) or the filesystem root (`/`).
+
+This is critical for monorepos and nested projects where you might run commands from subdirectories:
+
+```bash
+cd backend/src
+lota build    # finds lota.yml in project root
+```
 
 Pass `--help` after a command to see its arguments:
 
@@ -638,6 +695,9 @@ Key design principles:
 | Type-safe arguments | ✅ | ❌ | ❌ | ✅ |
 | Variable interpolation | ✅ | ✅ | ✅ | ✅ |
 | Nested groups | ✅ | ❌ | ❌ | ❌ |
+| Working directory (`dir`) | ✅ | ❌ | ❌ | ❌ |
+| Command dependencies | ✅ | ✅ | ❌ | ✅ |
+| Upward config search | ✅ | ❌ | ❌ | ❌ |
 | Env file imports | ✅ | ❌ | ❌ | ❌ |
 | Shell auto-detection | ✅ | ❌ | ❌ | ❌ |
 

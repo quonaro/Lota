@@ -146,6 +146,14 @@ func printCommandScripts(cmd config.Command) {
 		fmt.Println()
 	}
 
+	if len(cmd.Depends) > 0 {
+		fmt.Println("Depends:")
+		for _, dep := range cmd.Depends {
+			fmt.Printf("  - %s\n", dep)
+		}
+		fmt.Println()
+	}
+
 	if cmd.Script != "" {
 		fmt.Println("Script:")
 		fmt.Println("  " + cmd.Script)

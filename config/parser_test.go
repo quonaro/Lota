@@ -415,6 +415,30 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "command with depends",
+			yamlContent: `test:
+  desc: Run tests
+  depends:
+    - build
+    - lint
+  script: go test ./...
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Commands) != 1 {
+					t.Errorf("Expected 1 command, got %d", len(cfg.Commands))
+					return
+				}
+				cmd := cfg.Commands[0]
+				if len(cmd.Depends) != 2 {
+					t.Errorf("Expected 2 depends, got %d", len(cmd.Depends))
+				}
+				if cmd.Depends[0] != "build" || cmd.Depends[1] != "lint" {
+					t.Errorf("Depends = %v, want [build, lint]", cmd.Depends)
+				}
+			},
+		},
+		{
 			name:        "empty config",
 			yamlContent: ``,
 			wantErr:     true,

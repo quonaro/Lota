@@ -174,6 +174,10 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			c.Before = node.Content[i+1].Value
 		case "after":
 			c.After = node.Content[i+1].Value
+		case "depends":
+			if err := node.Content[i+1].Decode(&c.Depends); err != nil {
+				return err
+			}
 		}
 	}
 

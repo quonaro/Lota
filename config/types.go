@@ -39,6 +39,7 @@ type Command struct {
 	Vars    []Var    `yaml:"vars"`
 	Args    []Arg    `yaml:"-"`
 	RawArgs []string `yaml:"args"`
+	Depends []string `yaml:"depends,omitempty"`
 	Script  string   `yaml:"script"`
 	Before  string   `yaml:"before"`
 	After   string   `yaml:"after"`

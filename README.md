@@ -7,7 +7,7 @@ A declarative task runner for rapid development. Define commands in a YAML file 
 - ✨ **Declarative configuration** - Define tasks in YAML, no code needed
 - 🔧 **Flexible arguments** - Positional, flags, wildcards, arrays with type validation
 - 🔄 **Variable interpolation** - Environment variables with hierarchical scoping
-- 🌍 **Cross-platform** - Automatic shell detection (bash/PowerShell/cmd)
+- 🐚 **Shell-aware execution** - Auto-detects shell binary per OS, overridable at any level
 - 👁️ **Dry-run mode** - Preview commands before execution
 - 🛡️ **Graceful shutdown** - Proper process management on interrupt signals
 - 📄 **Env file imports** - Load variables from .env files
@@ -476,9 +476,11 @@ deploy:
 
 ### 🐚 Shell Configuration
 
-Lota automatically detects the appropriate shell for your OS:
-- **Linux/macOS**: bash
-- **Windows**: PowerShell
+Lota auto-detects the shell binary based on the OS:
+- **Linux/macOS**: `bash`
+- **Windows**: `powershell.exe`
+
+**Important:** Lota selects the shell interpreter, but the script itself is **shell-specific**. A `bash` script will not run on PowerShell and vice versa. Write scripts for the shell you target.
 
 Override the shell at any level:
 
@@ -691,7 +693,6 @@ Key design principles:
 | Feature | Lota | Make | npm scripts | Just |
 |---------|------|------|-------------|------|
 | Declarative YAML | ✅ | ❌ | ❌ | ✅ |
-| Cross-platform | ✅ | ❌ | ✅ | ✅ |
 | Type-safe arguments | ✅ | ❌ | ❌ | ✅ |
 | Variable interpolation | ✅ | ✅ | ✅ | ✅ |
 | Nested groups | ✅ | ❌ | ❌ | ❌ |

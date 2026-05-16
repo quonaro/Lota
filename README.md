@@ -7,7 +7,7 @@ A declarative task runner for rapid development. Define commands in a YAML file 
 - ✨ **Declarative configuration** - Define tasks in YAML, no code needed
 - 🔧 **Flexible arguments** - Positional, flags, wildcards, arrays with type validation
 - 🔄 **Variable interpolation** - Environment variables with hierarchical scoping
-- 🐚 **Shell-aware execution** - Auto-detects shell binary per OS, overridable at any level
+- 🐚 **Shell-aware execution** - Auto-detects shell binary, overridable at any level
 - 👁️ **Dry-run mode** - Preview commands before execution
 - 🛡️ **Graceful shutdown** - Proper process management on interrupt signals
 - 📄 **Env file imports** - Load variables from .env files
@@ -30,7 +30,7 @@ Or with specific version:
 curl -fsSL https://raw.githubusercontent.com/quonaro/lota/main/scripts/install.sh | bash -s -- -V v0.1.0
 ```
 
-Script auto-detects platform, verifies SHA256 checksum, and installs to `~/.local/bin` (or `/usr/local/bin` with sudo).
+Script verifies SHA256 checksum and installs to `~/.local/bin` (or `/usr/local/bin` with sudo).
 
 ### Build from Source
 
@@ -45,10 +45,6 @@ Or manually:
 git clone https://github.com/quonaro/lota.git
 cd lota && go build -o lota . && sudo mv lota /usr/local/bin/
 ```
-
-### Windows
-
-Download binary from [GitHub Releases](https://github.com/quonaro/lota/releases) and add to PATH.
 
 ## 🚀 Quick Start
 
@@ -478,16 +474,14 @@ deploy:
 
 ### 🐚 Shell Configuration
 
-Lota auto-detects the shell binary based on the OS:
-- **Linux/macOS**: `bash`
-- **Windows**: `powershell.exe`
+Lota auto-detects the shell binary (`bash` by default).
 
-**Important:** Lota selects the shell interpreter, but the script itself is **shell-specific**. A `bash` script will not run on PowerShell and vice versa. Write scripts for the shell you target.
+**Important:** Lota selects the shell interpreter, but the script itself is **shell-specific**. Write scripts for the shell you target.
 
 Override the shell at any level:
 
 ```yaml
-shell: powershell.exe  # app-level
+shell: zsh  # app-level
 
 dev:
   shell: bash          # group-level override
@@ -496,7 +490,7 @@ dev:
     script: echo $0
 ```
 
-Supported shells: bash, sh, zsh, dash, ksh, mksh, pdksh, ash, busybox, sash, tcsh, csh, fish, powershell.exe, pwsh, powershell, cmd, cmd.exe
+Supported shells: bash, sh, zsh, dash, ksh, mksh, pdksh, ash, busybox, sash, tcsh, csh, fish
 
 ### 📁 Working Directory (`dir`)
 

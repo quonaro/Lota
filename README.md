@@ -109,7 +109,7 @@ dev:
     args:
       - hot|h:bool
     script: |
-      if [ "{{hot}}" = "true" ]; then
+      if [ "$hot" = "true" ]; then
         npm run dev
       else
         npm start
@@ -126,7 +126,7 @@ test:
   args:
     - coverage|c:bool
   script: |
-    if [ "{{coverage}}" = "true" ]; then
+    if [ "$coverage" = "true" ]; then
       npm test -- --coverage
     else
       npm test
@@ -157,7 +157,7 @@ infra:
       args:
         - service:str
         - ...tail
-      script: $DOCKER_COMPOSE logs -f {{service}} {{tail}}
+      script: $DOCKER_COMPOSE logs -f "$service" "$tail"
   k8s:
     desc: Kubernetes operations
     namespace:
@@ -166,22 +166,22 @@ infra:
         desc: Create namespace
         args:
           - name:str
-        script: $KUBECTL create namespace {{name}}
+        script: $KUBECTL create namespace "$name"
       delete:
         desc: Delete namespace
         args:
           - name:str
-        script: $KUBECTL delete namespace {{name}}
+        script: $KUBECTL delete namespace "$name"
     deploy:
       desc: Deploy application
       args:
         - env|e:str=dev
         - dry|d:bool
       script: |
-        if [ "{{dry}}" = "true" ]; then
-          $KUBECTL apply --dry-run=client -f k8s/{{env}}/
+        if [ "$dry" = "true" ]; then
+          $KUBECTL apply --dry-run=client -f "k8s/$env/"
         else
-          $KUBECTL apply -f k8s/{{env}}/
+          $KUBECTL apply -f "k8s/$env/"
         fi
 ```
 
@@ -204,10 +204,10 @@ build:
     - output|o:str=./bin
     - race|r:bool
   script: |
-    if [ "{{race}}" = "true" ]; then
-      go build -race -o {{output}}/{{BINARY_NAME}} .
+    if [ "$race" = "true" ]; then
+      go build -race -o "$output/$BINARY_NAME" .
     else
-      go build -o {{output}}/{{BINARY_NAME}} .
+      go build -o "$output/$BINARY_NAME" .
     fi
 
 test:
@@ -217,19 +217,19 @@ test:
     - cover|c:bool
   script: |
     FLAGS=""
-    if [ "{{verbose}}" = "true" ]; then
+    if [ "$verbose" = "true" ]; then
       FLAGS="$FLAGS -v"
     fi
-    if [ "{{cover}}" = "true" ]; then
+    if [ "$cover" = "true" ]; then
       FLAGS="$FLAGS -cover"
     fi
     go test $FLAGS ./...
 
 release:
   desc: Build release binaries
-  before: echo "Building release for {{target}}"
+  before: echo "Building release for $target"
   script: |
-    IFS=/ read -r GOOS GOARCH <<< "{{target}}"
+    IFS=/ read -r GOOS GOARCH <<< "$target"
     go build -o ./dist/${BINARY_NAME}-${GOOS}-${GOARCH} .
   after: ls -lh ./dist/
 ```
@@ -252,7 +252,7 @@ db:
   migrate:
     desc: Run database migrations
     script: |
-      case {{environment}} in
+      case "$environment" in
         dev)   npm run db:migrate:dev ;;
         staging) npm run db:migrate:staging ;;
         prod)  npm run db:migrate:prod ;;
@@ -260,8 +260,8 @@ db:
       esac
   seed:
     desc: Seed database with test data
-    before: echo "Seeding {{environment}} database..."
-    script: npm run db:seed:{{environment}}
+    before: echo "Seeding $environment database..."
+    script: npm run "db:seed:$environment"
     after: echo "Database seeded successfully"
 
 deploy:
@@ -276,7 +276,7 @@ deploy:
     args:
       - confirm|c:bool
     script: |
-      if [ "{{confirm}}" != "true" ]; then
+      if [ "$confirm" != "true" ]; then
         echo "Use --confirm to deploy to production"
         exit 1
       fi
@@ -316,7 +316,7 @@ command-name:   # top-level command
 
 ### 🔑 Variables (`vars`)
 
-Variables are injected as environment variables into scripts. They support three scopes with priority: **app < group < command**.
+Variables are exported as environment variables into scripts. Both `vars` and `args` share a unified environment pool — CLI args override vars on name collision. They support three scopes with priority: **app < group < command**.
 
 ```yaml
 vars:
@@ -383,11 +383,11 @@ vars:
   app.database.port: "5432"
 ```
 
-Access in scripts: `{{app.app_name}}`, `{{app.database.host}}`
+Access in scripts: `$app_app_name`, `$app_database_host`
 
 ### 🎯 Arguments (`args`)
 
-Arguments are passed from the CLI and interpolated into scripts via `{{name}}`.
+Arguments are passed from the CLI and exported as environment variables, accessible via `$name` in scripts.
 
 **Format:** `name|short:type=default`
 
@@ -406,7 +406,7 @@ Arguments are passed from the CLI and interpolated into scripts via `{{name}}`.
 args:
   - filename:str
   - count:int
-script: process {{filename}} {{count}}
+script: process "$filename" "$count"
 ```
 ```bash
 lota cmd file.txt 5
@@ -418,7 +418,7 @@ lota cmd file.txt 5
 args:
   - output|o:str=./bin
   - verbose|v:bool
-script: go build -o {{output}}
+script: go build -o "$output"
 ```
 ```bash
 lota cmd --output ./dist
@@ -431,7 +431,7 @@ lota cmd -o ./dist --verbose
 args:
   - service:str
   - ...cmd
-script: docker exec {{service}} {{cmd}}
+script: docker exec "$service" "$cmd"
 ```
 ```bash
 lota cmd backend python manage.py shell
@@ -443,7 +443,7 @@ lota cmd backend python manage.py shell
 ```yaml
 args:
   - files:arr[5]   # collect up to 5 values
-script: lint {{files}}
+script: lint $files
 ```
 ```bash
 lota cmd a.go b.go c.go
@@ -471,8 +471,10 @@ deploy:
   args:
     - env:str=prod      # overrides app-level for this group
   run:
-    script: ./deploy.sh --env={{env}}
+    script: ./deploy.sh --env="$env"
 ```
+
+> **Deprecation:** Using `{{name}}` for argument interpolation is deprecated. Use `$name` instead. `{{name}}` will be removed in a future version.
 
 ### 🐚 Shell Configuration
 

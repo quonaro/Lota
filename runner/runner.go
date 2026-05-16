@@ -34,16 +34,13 @@ func executeShell(script string, env []string, shell string, baseDir, dir string
 }
 
 func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunOptions, shell string, dir string) error {
-	env := VarsToEnv(context.Vars)
+	unified := MergeVarsAndArgs(context.Vars, context.Args)
+	env := VarsToEnv(unified)
 
 	if opts.Verbose {
 		fmt.Printf("[verbose] command: %s\n", cmd.Name)
-		fmt.Println("[verbose] vars:")
-		for k, v := range context.Vars {
-			fmt.Printf("  %s=%s\n", k, v)
-		}
-		fmt.Println("[verbose] args:")
-		for k, v := range context.Args {
+		fmt.Println("[verbose] env:")
+		for k, v := range unified {
 			fmt.Printf("  %s=%s\n", k, v)
 		}
 	}

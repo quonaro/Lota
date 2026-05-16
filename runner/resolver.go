@@ -14,6 +14,19 @@ func VarsToEnv(vars map[string]string) []string {
 	return rs
 }
 
+// MergeVarsAndArgs merges vars and args into a single map.
+// CLI args override config vars on key collision.
+func MergeVarsAndArgs(vars, args map[string]string) map[string]string {
+	result := make(map[string]string, len(vars)+len(args))
+	for k, v := range vars {
+		result[k] = v
+	}
+	for k, v := range args {
+		result[k] = v
+	}
+	return result
+}
+
 // ResolveVars merges variables from all scopes for a specific command.
 // Priority: app vars < group1 vars < group2 vars < ... < command vars
 func ResolveVars(app config.AppConfig, groups []*config.Group, command config.Command) map[string]string {

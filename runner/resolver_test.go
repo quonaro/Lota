@@ -61,6 +61,55 @@ func TestVarsToEnv(t *testing.T) {
 	}
 }
 
+func TestMergeVarsAndArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		vars     map[string]string
+		args     map[string]string
+		expected map[string]string
+	}{
+		{
+			name:     "empty both",
+			vars:     map[string]string{},
+			args:     map[string]string{},
+			expected: map[string]string{},
+		},
+		{
+			name:     "only vars",
+			vars:     map[string]string{"A": "1", "B": "2"},
+			args:     map[string]string{},
+			expected: map[string]string{"A": "1", "B": "2"},
+		},
+		{
+			name:     "only args",
+			vars:     map[string]string{},
+			args:     map[string]string{"C": "3"},
+			expected: map[string]string{"C": "3"},
+		},
+		{
+			name:     "merged no collision",
+			vars:     map[string]string{"A": "1"},
+			args:     map[string]string{"B": "2"},
+			expected: map[string]string{"A": "1", "B": "2"},
+		},
+		{
+			name:     "args override vars",
+			vars:     map[string]string{"PORT": "80"},
+			args:     map[string]string{"PORT": "8080"},
+			expected: map[string]string{"PORT": "8080"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MergeVarsAndArgs(tt.vars, tt.args)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("MergeVarsAndArgs() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestResolveVars(t *testing.T) {
 	tests := []struct {
 		name     string

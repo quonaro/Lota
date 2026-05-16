@@ -1,7 +1,10 @@
 package runner
 
 import (
+	"bytes"
 	"lota/config"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -192,5 +195,31 @@ func TestInterpolate(t *testing.T) {
 				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestInterpolate_DeprecationWarning(t *testing.T) {
+	// Reset package-level warned map so the test is deterministic.
+	deprecationWarned = make(map[string]bool)
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	ctx := InterpolationContext{
+		Vars: map[string]string{},
+		Args: map[string]string{"port": "8080"},
+	}
+	_, _ = Interpolate("server --port={{port}}", ctx)
+
+	_ = w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	if !strings.Contains(output, "warning: {{port}} interpolation is deprecated") {
+		t.Errorf("expected deprecation warning, got: %q", output)
 	}
 }

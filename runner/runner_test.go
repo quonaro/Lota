@@ -172,3 +172,51 @@ func TestExecuteCommand_VarsPassedAsEnv(t *testing.T) {
 		t.Errorf("expected output to contain 'from_env', got %q", string(data))
 	}
 }
+
+func TestExecuteCommand_ArgsPassedAsEnv(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.txt")
+	cmd := &config.Command{
+		Name:   "test",
+		Script: fmt.Sprintf("echo $MSG > \"%s\"", out),
+	}
+	ctx := InterpolationContext{
+		Vars: map[string]string{},
+		Args: map[string]string{"MSG": "from_arg"},
+	}
+
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	if !strings.Contains(string(data), "from_arg") {
+		t.Errorf("expected output to contain 'from_arg', got %q", string(data))
+	}
+}
+
+func TestExecuteCommand_ArgsOverrideVarsInEnv(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.txt")
+	cmd := &config.Command{
+		Name:   "test",
+		Script: fmt.Sprintf("echo $PORT > \"%s\"", out),
+	}
+	ctx := InterpolationContext{
+		Vars: map[string]string{"PORT": "80"},
+		Args: map[string]string{"PORT": "8080"},
+	}
+
+	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	if !strings.Contains(string(data), "8080") {
+		t.Errorf("expected args to override vars in env, got %q", string(data))
+	}
+}

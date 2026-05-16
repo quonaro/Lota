@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"lota/config"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -10,6 +11,10 @@ import (
 )
 
 var placeholderRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+
+// deprecationWarned tracks which {{}} placeholders have already emitted a warning.
+// Safe without synchronization because Lota executes commands sequentially.
+var deprecationWarned = make(map[string]bool)
 
 // ValidationError represents an interpolation validation error
 type ValidationError struct {
@@ -68,6 +73,12 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 				errors = append(errors, fmt.Sprintf("%s is required", placeholder))
 			}
 			continue
+		}
+		if _, isArg := context.Args[placeholder]; isArg {
+			if !deprecationWarned[placeholder] {
+				fmt.Fprintf(os.Stderr, "warning: {{%s}} interpolation is deprecated, use $%s instead\n", placeholder, placeholder)
+				deprecationWarned[placeholder] = true
+			}
 		}
 		result = strings.ReplaceAll(result, "{{"+placeholder+"}}", value)
 	}

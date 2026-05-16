@@ -80,6 +80,23 @@ func ResolveArgs(app config.AppConfig, groups []*config.Group, command config.Co
 	return result
 }
 
+func ResolveDir(app config.AppConfig, groups []*config.Group, command config.Command) string {
+	// 1. Group level dir (outermost to innermost)
+	var dir string
+	for _, g := range groups {
+		if g.Dir != "" {
+			dir = g.Dir
+		}
+	}
+
+	// 2. Command level dir (highest priority)
+	if command.Dir != "" {
+		dir = command.Dir
+	}
+
+	return dir
+}
+
 func ResolveShell(app config.AppConfig, groups []*config.Group, command config.Command) string {
 	// 1. App level shell (lowest priority)
 	shell := app.Shell

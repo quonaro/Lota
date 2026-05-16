@@ -2,8 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"lota/config"
 	"lota/runner"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -43,6 +45,12 @@ func Run() error {
 		return fmt.Errorf("error loading config: %w", err)
 	}
 
+	fc, err := config.GetConfigPath(flags.Config)
+	if err != nil {
+		return fmt.Errorf("error resolving config path: %w", err)
+	}
+	configDir := filepath.Dir(fc.Path)
+
 	// Check for help flag before ResolveCommand (it skips flags)
 	if hasHelpFlag(remainingArgs) {
 		// Resolve command to show help for it
@@ -73,8 +81,9 @@ func Run() error {
 	}
 
 	opts := runner.RunOptions{
-		Verbose: flags.Verbose,
-		DryRun:  flags.DryRun,
+		Verbose:   flags.Verbose,
+		DryRun:    flags.DryRun,
+		ConfigDir: configDir,
 	}
 	return RunCommand(cfg, result, cmdArgs, opts)
 }

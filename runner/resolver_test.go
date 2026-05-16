@@ -228,6 +228,77 @@ func TestResolveArgs(t *testing.T) {
 	}
 }
 
+func TestResolveDir(t *testing.T) {
+	tests := []struct {
+		name     string
+		app      config.AppConfig
+		groups   []*config.Group
+		command  config.Command
+		expected string
+	}{
+		{
+			name:     "no dir",
+			app:      config.AppConfig{},
+			groups:   nil,
+			command:  config.Command{Name: "cmd"},
+			expected: "",
+		},
+		{
+			name:   "group dir",
+			app:    config.AppConfig{},
+			groups: []*config.Group{{Name: "dev", Dir: "./backend"}},
+			command: config.Command{
+				Name: "build",
+			},
+			expected: "./backend",
+		},
+		{
+			name:   "command overrides group dir",
+			app:    config.AppConfig{},
+			groups: []*config.Group{{Name: "dev", Dir: "./backend"}},
+			command: config.Command{
+				Name: "build",
+				Dir:  "./frontend",
+			},
+			expected: "./frontend",
+		},
+		{
+			name: "nested groups innermost wins",
+			app:  config.AppConfig{},
+			groups: []*config.Group{
+				{Name: "outer", Dir: "./outer"},
+				{Name: "inner", Dir: "./inner"},
+			},
+			command: config.Command{
+				Name: "build",
+			},
+			expected: "./inner",
+		},
+		{
+			name: "command overrides nested group",
+			app:  config.AppConfig{},
+			groups: []*config.Group{
+				{Name: "outer", Dir: "./outer"},
+				{Name: "inner", Dir: "./inner"},
+			},
+			command: config.Command{
+				Name: "build",
+				Dir:  "./cmd",
+			},
+			expected: "./cmd",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ResolveDir(tt.app, tt.groups, tt.command)
+			if result != tt.expected {
+				t.Errorf("ResolveDir() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func argsSlicesEqual(a, b []config.Arg) bool {
 	if len(a) != len(b) {
 		return false

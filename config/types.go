@@ -17,6 +17,7 @@ type AppConfig struct {
 
 type Group struct {
 	Shell    string `yaml:"shell,omitempty"`
+	Dir      string `yaml:"dir,omitempty"`
 	Name     string
 	Desc     string   `yaml:"desc"`
 	Vars     []Var    `yaml:"vars"`
@@ -32,6 +33,7 @@ type Group struct {
 
 type Command struct {
 	Shell   string `yaml:"shell,omitempty"`
+	Dir     string `yaml:"dir,omitempty"`
 	Name    string
 	Desc    string   `yaml:"desc"`
 	Vars    []Var    `yaml:"vars"`

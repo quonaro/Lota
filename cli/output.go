@@ -140,6 +140,12 @@ func printCommandArgs(positionalArgs, flagArgs []config.Arg, cfg config.AppConfi
 
 // printCommandScripts prints the script and hooks for a command in verbose mode
 func printCommandScripts(cmd config.Command) {
+	if cmd.Dir != "" {
+		fmt.Println("Directory:")
+		fmt.Println("  " + cmd.Dir)
+		fmt.Println()
+	}
+
 	if cmd.Script != "" {
 		fmt.Println("Script:")
 		fmt.Println("  " + cmd.Script)

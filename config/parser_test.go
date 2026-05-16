@@ -375,6 +375,46 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "command with dir",
+			yamlContent: `build:
+  desc: Build backend
+  dir: ./backend
+  script: go build .
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Commands) != 1 {
+					t.Errorf("Expected 1 command, got %d", len(cfg.Commands))
+					return
+				}
+				cmd := cfg.Commands[0]
+				if cmd.Dir != "./backend" {
+					t.Errorf("Command dir = %v, want ./backend", cmd.Dir)
+				}
+			},
+		},
+		{
+			name: "group with dir",
+			yamlContent: `backend:
+  desc: Backend commands
+  dir: ./backend
+  build:
+    desc: Build
+    script: go build .
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Groups) != 1 {
+					t.Errorf("Expected 1 group, got %d", len(cfg.Groups))
+					return
+				}
+				group := cfg.Groups[0]
+				if group.Dir != "./backend" {
+					t.Errorf("Group dir = %v, want ./backend", group.Dir)
+				}
+			},
+		},
+		{
 			name:        "empty config",
 			yamlContent: ``,
 			wantErr:     true,

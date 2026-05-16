@@ -109,5 +109,7 @@ func RunCommand(cfg *config.AppConfig, result config.SearchResult, cliArgs []str
 		ArgDefs: args,
 	}
 
-	return runner.ExecuteCommand(result.Command, context, opts, shell)
+	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
+
+	return runner.ExecuteCommand(result.Command, context, opts, shell, dir)
 }

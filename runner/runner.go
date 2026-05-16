@@ -5,17 +5,19 @@ import (
 	"lota/config"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 // RunOptions controls execution behavior
 type RunOptions struct {
-	Verbose bool
-	DryRun  bool
+	Verbose   bool
+	DryRun    bool
+	ConfigDir string // base directory for resolving relative dir paths
 }
 
 // executeShell runs a script in shell with environment variables
-func executeShell(script string, env []string, shell string) error {
+func executeShell(script string, env []string, shell string, baseDir, dir string) error {
 	// Split shell command and flags (e.g., "bash -c" -> ["bash", "-c"])
 	parts := strings.Fields(shell)
 	if len(parts) == 0 {
@@ -25,10 +27,13 @@ func executeShell(script string, env []string, shell string) error {
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if dir != "" {
+		cmd.Dir = filepath.Join(baseDir, dir)
+	}
 	return cmd.Run()
 }
 
-func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunOptions, shell string) error {
+func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunOptions, shell string, dir string) error {
 	env := VarsToEnv(context.Vars)
 
 	if opts.Verbose {
@@ -55,7 +60,7 @@ func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunO
 		if opts.DryRun {
 			fmt.Printf("[dry-run] before:\n%s\n", interpolatedBefore)
 		} else {
-			if err := executeShell(interpolatedBefore, env, shell); err != nil {
+			if err := executeShell(interpolatedBefore, env, shell, opts.ConfigDir, dir); err != nil {
 				return fmt.Errorf("before hook failed: %w", err)
 			}
 		}
@@ -74,7 +79,7 @@ func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunO
 			fmt.Printf("[dry-run] script:\n%s\n", interpolatedScript)
 			return nil
 		}
-		if err := executeShell(interpolatedScript, env, shell); err != nil {
+		if err := executeShell(interpolatedScript, env, shell, opts.ConfigDir, dir); err != nil {
 			return err
 		}
 	}
@@ -92,7 +97,7 @@ func ExecuteCommand(cmd *config.Command, context InterpolationContext, opts RunO
 			fmt.Printf("[dry-run] after:\n%s\n", interpolatedAfter)
 			return nil
 		}
-		if err := executeShell(interpolatedAfter, env, shell); err != nil {
+		if err := executeShell(interpolatedAfter, env, shell, opts.ConfigDir, dir); err != nil {
 			return fmt.Errorf("after hook failed: %w", err)
 		}
 	}

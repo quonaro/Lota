@@ -104,6 +104,8 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 		switch key {
 		case "desc":
 			g.Desc = valueNode.Value
+		case "dir":
+			g.Dir = valueNode.Value
 		case "vars":
 			if err := valueNode.Decode(&g.Vars); err != nil {
 				return err
@@ -150,6 +152,8 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 		switch key {
 		case "desc":
 			c.Desc = node.Content[i+1].Value
+		case "dir":
+			c.Dir = node.Content[i+1].Value
 		case "vars":
 			if err := node.Content[i+1].Decode(&c.Vars); err != nil {
 				return err

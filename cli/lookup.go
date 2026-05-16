@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"lota/config"
 	"lota/runner"
@@ -189,7 +190,7 @@ func ResolveCommand(cfg *config.AppConfig, cliArgs []string) (config.SearchResul
 }
 
 // executeSingleCommand runs a single command result with empty CLI args (for dependencies).
-func executeSingleCommand(cfg *config.AppConfig, result config.SearchResult, opts runner.RunOptions) error {
+func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, opts runner.RunOptions) error {
 	args := runner.ResolveArgs(*cfg, result.Groups, *result.Command)
 
 	shell := runner.ResolveShell(*cfg, result.Groups, *result.Command)
@@ -209,11 +210,11 @@ func executeSingleCommand(cfg *config.AppConfig, result config.SearchResult, opt
 
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
-	return runner.ExecuteCommand(result.Command, context, opts, shell, dir)
+	return runner.ExecuteCommand(ctx, result.Command, context, opts, shell, dir)
 }
 
 // RunCommand executes a command with CLI arguments, including dependencies.
-func RunCommand(cfg *config.AppConfig, result config.SearchResult, cliArgs []string, opts runner.RunOptions) error {
+func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, cliArgs []string, opts runner.RunOptions) error {
 	if result.Command == nil {
 		return fmt.Errorf("not a command")
 	}
@@ -227,7 +228,7 @@ func RunCommand(cfg *config.AppConfig, result config.SearchResult, cliArgs []str
 		if opts.Verbose {
 			fmt.Printf("[verbose] running dependency: %s\n", commandPath(dep.Command, dep.Groups))
 		}
-		if err := executeSingleCommand(cfg, dep, opts); err != nil {
+		if err := executeSingleCommand(ctx, cfg, dep, opts); err != nil {
 			return fmt.Errorf("dependency failed: %w", err)
 		}
 	}
@@ -251,5 +252,5 @@ func RunCommand(cfg *config.AppConfig, result config.SearchResult, cliArgs []str
 
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
-	return runner.ExecuteCommand(result.Command, context, opts, shell, dir)
+	return runner.ExecuteCommand(ctx, result.Command, context, opts, shell, dir)
 }

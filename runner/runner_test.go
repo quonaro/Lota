@@ -1,19 +1,21 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"lota/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExecuteCommand_EmptyScript(t *testing.T) {
 	cmd := &config.Command{Name: "noop"}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -26,7 +28,7 @@ func TestExecuteCommand_DryRun_ScriptNotExecuted(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{DryRun: true}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{DryRun: true}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -44,7 +46,7 @@ func TestExecuteCommand_DryRun_BeforeHookNotExecuted(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{DryRun: true}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{DryRun: true}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -57,7 +59,7 @@ func TestExecuteCommand_ScriptInterpolationError(t *testing.T) {
 	cmd := &config.Command{Name: "test", Script: "echo {{undefined}}"}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err == nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err == nil {
 		t.Error("expected error for undefined placeholder, got nil")
 	}
 }
@@ -70,7 +72,7 @@ func TestExecuteCommand_BeforeHookInterpolationError(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err == nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err == nil {
 		t.Error("expected error for undefined placeholder in before hook, got nil")
 	}
 }
@@ -87,7 +89,7 @@ func TestExecuteCommand_WithInterpolation(t *testing.T) {
 		ArgDefs: []config.Arg{{Name: "msg", Type: "str"}},
 	}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -113,7 +115,7 @@ func TestExecuteCommand_BeforeAndAfterHooksExecuted(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -140,7 +142,7 @@ func TestExecuteCommand_WithDir(t *testing.T) {
 	}
 	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{ConfigDir: tmpDir}, "sh -c", "subdir"); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{ConfigDir: tmpDir}, "sh -c", "subdir"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -160,7 +162,7 @@ func TestExecuteCommand_VarsPassedAsEnv(t *testing.T) {
 		Args: map[string]string{},
 	}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -184,7 +186,7 @@ func TestExecuteCommand_ArgsPassedAsEnv(t *testing.T) {
 		Args: map[string]string{"MSG": "from_arg"},
 	}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -208,7 +210,7 @@ func TestExecuteCommand_ArgsOverrideVarsInEnv(t *testing.T) {
 		Args: map[string]string{"PORT": "8080"},
 	}
 
-	if err := ExecuteCommand(cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -218,5 +220,88 @@ func TestExecuteCommand_ArgsOverrideVarsInEnv(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "8080") {
 		t.Errorf("expected args to override vars in env, got %q", string(data))
+	}
+}
+
+func TestExecuteCommand_AfterRunsOnScriptFailure(t *testing.T) {
+	dir := t.TempDir()
+	afterMarker := filepath.Join(dir, "after")
+
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "exit 1",
+		After:  fmt.Sprintf("touch \"%s\"", afterMarker),
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", "")
+	if err == nil {
+		t.Fatal("expected script error, got nil")
+	}
+
+	if _, err := os.Stat(afterMarker); err != nil {
+		t.Error("after hook was not executed after script failure")
+	}
+}
+
+func TestExecuteCommand_AfterNotRunOnBeforeFailure(t *testing.T) {
+	dir := t.TempDir()
+	afterMarker := filepath.Join(dir, "after")
+
+	cmd := &config.Command{
+		Name:   "test",
+		Before: "exit 1",
+		Script: "echo noop",
+		After:  fmt.Sprintf("touch \"%s\"", afterMarker),
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", "")
+	if err == nil {
+		t.Fatal("expected before error, got nil")
+	}
+
+	if _, err := os.Stat(afterMarker); err == nil {
+		t.Error("after hook should not run when before fails")
+	}
+}
+
+func TestExecuteCommand_Timeout(t *testing.T) {
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "sleep 5",
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	start := time.Now()
+	err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{Timeout: 100 * time.Millisecond}, "sh -c", "")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("timeout was not enforced: elapsed %v", elapsed)
+	}
+}
+
+func TestExecuteCommand_ExitCodePropagation(t *testing.T) {
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "exit 42",
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{}, "sh -c", "")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	shellErr, ok := err.(*ShellError)
+	if !ok {
+		t.Fatalf("expected *ShellError, got %T", err)
+	}
+	if shellErr.ExitCode != 42 {
+		t.Errorf("expected exit code 42, got %d", shellErr.ExitCode)
 	}
 }

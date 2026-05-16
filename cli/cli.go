@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"lota/config"
 	"lota/runner"
@@ -84,6 +85,7 @@ func Run() error {
 		Verbose:   flags.Verbose,
 		DryRun:    flags.DryRun,
 		ConfigDir: configDir,
+		Timeout:   flags.Timeout,
 	}
-	return RunCommand(cfg, result, cmdArgs, opts)
+	return RunCommand(context.Background(), cfg, result, cmdArgs, opts)
 }

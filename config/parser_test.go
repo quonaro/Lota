@@ -285,6 +285,19 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "config with top-level shell",
+			yamlContent: `shell: bash
+vars:
+  - PORT=80
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if cfg.Shell != "bash" {
+					t.Errorf("Shell = %v, want bash", cfg.Shell)
+				}
+			},
+		},
+		{
 			name: "config with top-level command",
 			yamlContent: `build:
   desc: Build the application

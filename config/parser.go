@@ -67,6 +67,8 @@ func ParseConfig(path string) (*AppConfig, error) {
 					return nil, err
 				}
 			}
+		case "shell":
+			config.Shell = valueNode.Value
 		default:
 			// Distinguish command (has "script" field) from group
 			if hasField(valueNode, "script") {

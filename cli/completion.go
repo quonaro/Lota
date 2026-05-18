@@ -127,8 +127,8 @@ func PrintCompletionScript(shell string) error {
 		fmt.Println(`#compdef lota
 function _lota {
     local line="${LBUFFER}${RBUFFER}"
-    export COMP_LINE="$line"
-    export COMP_POINT=${#LBUFFER}
+    local COMP_LINE="$line"
+    local COMP_POINT=${#LBUFFER}
     local -a completions
     completions=($('lota'))
     compadd -a completions

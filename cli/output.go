@@ -8,6 +8,7 @@ import (
 	"lota/shared"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/common-nighthawk/go-figure"
@@ -49,7 +50,23 @@ func resolveColor(objColor string, inheritColor *bool, ancestors []*config.Group
 	if objColor != "" {
 		return objColor
 	}
+	if inheritColor != nil && !*inheritColor {
+		return ""
+	}
+	allowed := false
 	if inheritColor != nil && *inheritColor {
+		allowed = true
+	} else {
+		for i := len(ancestors) - 1; i >= 0; i-- {
+			if ancestors[i].InheritColor != nil {
+				if *ancestors[i].InheritColor {
+					allowed = true
+				}
+				break
+			}
+		}
+	}
+	if allowed {
 		for i := len(ancestors) - 1; i >= 0; i-- {
 			if ancestors[i].Color != "" {
 				return ancestors[i].Color
@@ -59,10 +76,25 @@ func resolveColor(objColor string, inheritColor *bool, ancestors []*config.Group
 	return ""
 }
 
+// parseHexColor parses a #RRGGBB hex string into RGB components.
+func parseHexColor(s string) (r, g, b uint8, ok bool) {
+	if len(s) != 7 || s[0] != '#' {
+		return 0, 0, 0, false
+	}
+	v, err := strconv.ParseUint(s[1:], 16, 32)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return uint8(v >> 16), uint8(v >> 8), uint8(v), true
+}
+
 // colorize applies an ANSI color to text if the color name is valid.
 func colorize(text, colorName string) string {
 	if colorName == "" {
 		return text
+	}
+	if r, g, b, ok := parseHexColor(colorName); ok {
+		return color.RGB(int(r), int(g), int(b)).Sprint(text)
 	}
 	fn, ok := ansiColors[strings.ToLower(colorName)]
 	if !ok {

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -40,7 +41,23 @@ func isValidColor(c string) bool {
 		return true
 	}
 	_, ok := validColors[strings.ToLower(c)]
-	return ok
+	if ok {
+		return true
+	}
+	if len(c) == 7 && c[0] == '#' {
+		_, err := strconv.ParseUint(c[1:], 16, 32)
+		return err == nil
+	}
+	return false
+}
+
+func validColorsList() string {
+	colors := make([]string, 0, len(validColors))
+	for c := range validColors {
+		colors = append(colors, c)
+	}
+	sort.Strings(colors)
+	return strings.Join(colors, ", ") + " (or any #RRGGBB hex value)"
 }
 
 func nodeKindName(kind yaml.Kind) string {
@@ -231,7 +248,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 		case "color":
 			g.Color = valueNode.Value
 			if !isValidColor(g.Color) {
-				return fmt.Errorf("%d: invalid color %q for group %q", valueNode.Line, g.Color, g.Name)
+				return fmt.Errorf("%d: invalid color %q for group %q\nAvailable colors: %s", valueNode.Line, g.Color, g.Name, validColorsList())
 			}
 		case "inherit_color":
 			var inherit bool
@@ -299,7 +316,7 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 		case "color":
 			c.Color = valueNode.Value
 			if !isValidColor(c.Color) {
-				return fmt.Errorf("%d: invalid color %q for command %q", valueNode.Line, c.Color, c.Name)
+				return fmt.Errorf("%d: invalid color %q for command %q\nAvailable colors: %s", valueNode.Line, c.Color, c.Name, validColorsList())
 			}
 		case "inherit_color":
 			var inherit bool

@@ -142,6 +142,32 @@ func TestResolveColor(t *testing.T) {
 			ancestors:    []*config.Group{},
 			want:         "",
 		},
+		{
+			name:     "inherit via ancestor flag",
+			objColor: "",
+			ancestors: []*config.Group{
+				{Name: "parent", Color: "yellow", InheritColor: &trueVal},
+			},
+			want: "yellow",
+		},
+		{
+			name:     "ancestor inherit false blocks",
+			objColor: "",
+			ancestors: []*config.Group{
+				{Name: "outer", Color: "yellow", InheritColor: &trueVal},
+				{Name: "inner", Color: "", InheritColor: &falseVal},
+			},
+			want: "",
+		},
+		{
+			name:         "own inherit true overrides ancestor false",
+			objColor:     "",
+			inheritColor: &trueVal,
+			ancestors: []*config.Group{
+				{Name: "parent", Color: "yellow", InheritColor: &falseVal},
+			},
+			want: "yellow",
+		},
 	}
 
 	for _, tt := range tests {
@@ -167,6 +193,14 @@ func TestColorize(t *testing.T) {
 	got := colorize("hello", "red")
 	if got == "" {
 		t.Error("colorize(hello, red) should return non-empty text")
+	}
+	// colorize with hex color returns non-empty text (ANSI may be disabled in non-TTY)
+	if gotHex := colorize("hello", "#FF0000"); gotHex == "" {
+		t.Error("colorize(hello, \"#FF0000\") should return non-empty text")
+	}
+	// colorize with invalid hex falls back to plain text
+	if gotBad := colorize("hello", "#GGGGGG"); gotBad != "hello" {
+		t.Errorf("colorize(hello, \"#GGGGGG\") = %q, want plain \"hello\"", gotBad)
 	}
 }
 

@@ -580,7 +580,7 @@ lota infra k8s apply
 
 ### 🎨 Help Colors
 
-Highlight group and command names in `lota help` output using named ANSI colors:
+Highlight group and command names in `lota help` output using named ANSI colors or hex values:
 
 ```yaml
 dev:
@@ -601,10 +601,10 @@ dev:
 
 | Option | Description |
 |--------|-------------|
-| `color` | Named ANSI color (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and `hi*` variants) |
+| `color` | Named ANSI color (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and `hi*` variants) or any `#RRGGBB` hex value (e.g. `#FF5733`) |
 | `inherit_color` | `true` to inherit the nearest ancestor `color`. Defaults to `null` (no inheritance) |
 
-Color resolution priority: **direct `color` > inherited `color` > default**. `inherit_color: true` walks up the group chain and uses the first non-empty color found.
+Color resolution priority: **direct `color` > inherited `color` > default**. `inherit_color: true` walks up the group chain and uses the first non-empty color found. Hex colors work in true-color capable terminals.
 
 ## 🚩 Global Flags
 

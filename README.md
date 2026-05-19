@@ -14,7 +14,8 @@ A declarative task runner for rapid development. Define commands in a YAML file 
 - 📊 **YAML config imports** - Import nested YAML configs with dot-notation access
 - 📂 **Nested groups** - Organize commands in hierarchical groups
 - 📁 **Working directory** - Set `dir` per command or group (relative to `lota.yml`)
-- 🔗 **Command dependencies** - `depends` for automatic prerequisite execution with cycle detection
+- � **Tee logging** - Write stdout/stderr to files while still printing to terminal
+- � **Command dependencies** - `depends` for automatic prerequisite execution with cycle detection
 - 🔍 **Upward config search** - Find `lota.yml` in parent directories up to the git root
 
 ## 📦 Installation
@@ -26,6 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/quonaro/lota/main/scripts/install.s
 ```
 
 Or with specific version:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/quonaro/lota/main/scripts/install.sh | bash -s -- -V v0.1.0
 ```
@@ -41,6 +43,7 @@ go install github.com/quonaro/lota@latest
 ```
 
 Or manually:
+
 ```bash
 git clone https://github.com/quonaro/lota.git
 cd lota && go build -o lota . && sudo mv lota /usr/local/bin/
@@ -238,7 +241,7 @@ shell: bash
 vars:
   - import:env .env.local
   - import:env .env.shared
-  - import:yaml config/secrets.yaml@public app  # Import public config section
+  - import:yaml config/secrets.yaml@public app # Import public config section
 
 args:
   - environment|env:str=dev
@@ -285,33 +288,37 @@ deploy:
 ### 📋 Structure
 
 ```yaml
-shell: bash  # Optional: default shell (auto-detected if omitted)
+shell: bash # Optional: default shell (auto-detected if omitted)
 
-vars:           # global environment variables
+vars: # global environment variables
   - KEY=value
-  - import:env .env  # Import from .env file
+  - import:env .env # Import from .env file
 
-args:           # global argument definitions
+args: # global argument definitions
   - name:type=default
 
-group-name:     # command group
+group-name: # command group
   desc: ...
-  color: cyan   # Optional: highlight group name in help
-  inherit_color: true  # Optional: inherit color from parent group
-  shell: sh     # Optional: override shell for this group
-  vars:         # group-level variables
+  color: cyan # Optional: highlight group name in help
+  inherit_color: true # Optional: inherit color from parent group
+  shell: sh # Optional: override shell for this group
+  vars: # group-level variables
     - KEY=value
-  args:         # group-level arguments
+  args: # group-level arguments
     - name:type=default
+  log: # Optional: group-level tee logging
+    path: group.log
   command-name:
     desc: ...
-    color: green   # Optional: highlight command name in help
+    color: green # Optional: highlight command name in help
     script: ...
 
-command-name:   # top-level command
+command-name: # top-level command
   desc: ...
-  color: red    # Optional: highlight command name in help
+  color: red # Optional: highlight command name in help
   script: ...
+  log: # Optional: command-level tee logging
+    path: cmd.log
 ```
 
 ### 🔑 Variables (`vars`)
@@ -320,14 +327,14 @@ Variables are exported as environment variables into scripts. Both `vars` and `a
 
 ```yaml
 vars:
-  - DOCKER=docker compose   # app-level
+  - DOCKER=docker compose # app-level
 
 dev:
   vars:
-    - DOCKER=docker          # overrides app-level for this group
+    - DOCKER=docker # overrides app-level for this group
   run:
     vars:
-      - DOCKER=podman        # overrides group-level for this command
+      - DOCKER=podman # overrides group-level for this command
     script: $DOCKER up
 ```
 
@@ -347,9 +354,9 @@ Import nested YAML configurations with automatic flattening to dot-notation:
 
 ```yaml
 vars:
-  - import:yaml config.yaml          # Import all with original keys
-  - import:yaml config.yaml app     # Import all with 'app.' prefix
-  - import:yaml config.yaml@public   # Import only 'public' section
+  - import:yaml config.yaml # Import all with original keys
+  - import:yaml config.yaml app # Import all with 'app.' prefix
+  - import:yaml config.yaml@public # Import only 'public' section
   - import:yaml secrets.yaml@db cfg # Import 'db' section with 'cfg.' prefix
 ```
 
@@ -362,6 +369,7 @@ vars:
 - **prefix** (optional) - Add prefix to all imported keys
 
 **Example YAML file:**
+
 ```yaml
 # config.yaml
 public:
@@ -376,6 +384,7 @@ private:
 ```
 
 **Resulting variables:**
+
 ```yaml
 # import:yaml config.yaml@public app
 vars:
@@ -393,12 +402,12 @@ Arguments are passed from the CLI and exported as environment variables, accessi
 
 **Format:** `name|short:type=default`
 
-| Part | Description | Example |
-|------|-------------|---------|
-| `name` | Long name | `output` |
-| `\|short` | Short alias (optional) | `\|o` |
-| `:type` | Type (optional) | `:str`, `:int`, `:bool`, `:arr` |
-| `=default` | Default value (optional) | `=./bin` |
+| Part       | Description              | Example                         |
+| ---------- | ------------------------ | ------------------------------- |
+| `name`     | Long name                | `output`                        |
+| `\|short`  | Short alias (optional)   | `\|o`                           |
+| `:type`    | Type (optional)          | `:str`, `:int`, `:bool`, `:arr` |
+| `=default` | Default value (optional) | `=./bin`                        |
 
 #### 📝 Argument Types
 
@@ -410,6 +419,7 @@ args:
   - count:int
 script: process "$filename" "$count"
 ```
+
 ```bash
 lota cmd file.txt 5
 ```
@@ -422,6 +432,7 @@ args:
   - verbose|v:bool
 script: go build -o "$output"
 ```
+
 ```bash
 lota cmd --output ./dist
 lota cmd -o ./dist --verbose
@@ -435,6 +446,7 @@ args:
   - ...cmd
 script: docker exec "$service" "$cmd"
 ```
+
 ```bash
 lota cmd backend python manage.py shell
 # service=backend, cmd="python manage.py shell"
@@ -444,9 +456,10 @@ lota cmd backend python manage.py shell
 
 ```yaml
 args:
-  - files:arr[5]   # collect up to 5 values
+  - files:arr[5] # collect up to 5 values
 script: lint $files
 ```
+
 ```bash
 lota cmd a.go b.go c.go
 ```
@@ -467,11 +480,11 @@ Like vars, args can be defined at app, group, or command level and are merged wi
 
 ```yaml
 args:
-  - env:str=dev         # available to all commands
+  - env:str=dev # available to all commands
 
 deploy:
   args:
-    - env:str=prod      # overrides app-level for this group
+    - env:str=prod # overrides app-level for this group
   run:
     script: ./deploy.sh --env="$env"
 ```
@@ -489,12 +502,12 @@ Lota auto-detects the shell binary (`bash` by default).
 Override the shell at any level:
 
 ```yaml
-shell: zsh  # app-level
+shell: zsh # app-level
 
 dev:
-  shell: bash          # group-level override
+  shell: bash # group-level override
   run:
-    shell: sh          # command-level override
+    shell: sh # command-level override
     script: echo $0
 ```
 
@@ -506,13 +519,13 @@ Set the working directory for commands and groups. The path is resolved relative
 
 ```yaml
 backend:
-  dir: ./backend          # group-level default
+  dir: ./backend # group-level default
   build:
     desc: Build backend
     script: go build .
   test:
     desc: Run backend tests
-    dir: ./backend/tests  # command-level override
+    dir: ./backend/tests # command-level override
     script: go test ./...
 ```
 
@@ -553,6 +566,60 @@ deploy:
 ```
 
 `after` always runs, even if `script` fails.
+
+### 📝 Tee Logging (`log`)
+
+Write command output to log files while still printing to the terminal. Logs support **additive inheritance**: a command writes to its own log file **plus** all ancestor log files, unless `independent: true` breaks the chain.
+
+```yaml
+log:
+  path: logs/all.log # app-level: all commands inherit this
+
+build:
+  desc: Build the application
+  script: go build -o bin/app .
+  log:
+    path: logs/build.log # writes to both all.log and build.log
+    truncate: true # overwrite on each run (default: append)
+
+test:
+  desc: Run tests
+  script: go test ./...
+  log:
+    path: logs/test.log
+    independent: true # writes ONLY to test.log, skips all.log
+```
+
+| Field         | Type   | Default      | Description                                                                                     |
+| ------------- | ------ | ------------ | ----------------------------------------------------------------------------------------------- |
+| `path`        | string | **required** | Log file path (relative to `lota.yml`). Supports variable interpolation (`$var`).               |
+| `truncate`    | bool   | `false`      | If `true`, overwrite the file on each run. If `false`, append.                                  |
+| `independent` | bool   | `false`      | If `true`, discard all ancestor logs and write only to this file. **Not allowed at app level.** |
+
+**Inheritance behavior:**
+
+- `independent: false` (default): the command writes to its own `path` **plus** all ancestor `path`s.
+- `independent: true`: the command writes **only** to its own `path`; ancestor logs are skipped.
+- `truncate` applies **only** to the `path` declared on the same level.
+
+```yaml
+log:
+  path: logs/global.log
+
+infra:
+  desc: Infrastructure
+  log:
+    path: logs/infra.log
+    independent: true # infra commands skip global.log
+  docker:
+    desc: Docker ops
+    log:
+      path: logs/docker.log # writes to infra.log + docker.log
+    up:
+      script: docker-compose up -d
+```
+
+Runtime errors (missing parent dir, permission denied, path is a directory) are printed to stderr as `[log error]` but **do not fail the command**.
 
 ### 📁 Nested Groups
 
@@ -599,27 +666,27 @@ dev:
       script: npm run build
 ```
 
-| Option | Description |
-|--------|-------------|
-| `color` | Named ANSI color (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and `hi*` variants) or any `#RRGGBB` hex value (e.g. `#FF5733`) |
-| `inherit_color` | `true` to inherit the nearest ancestor `color`. Defaults to `null` (no inheritance) |
+| Option          | Description                                                                                                                                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `color`         | Named ANSI color (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and `hi*` variants) or any `#RRGGBB` hex value (e.g. `#FF5733`) |
+| `inherit_color` | `true` to inherit the nearest ancestor `color`. Defaults to `null` (no inheritance)                                                                      |
 
 Color resolution priority: **direct `color` > inherited `color` > default**. `inherit_color: true` walks up the group chain and uses the first non-empty color found. Hex colors work in true-color capable terminals.
 
 ## 🚩 Global Flags
 
-| Flag | Description |
-|------|-------------|
-| `-h`, `--help` | Show help |
-| `-V` | Show version only (machine-friendly) |
-| `--version` | Show version with ASCII banner |
-| `-v`, `--verbose` | Enable verbose output |
-| `--dry-run` | Show commands without executing |
-| `--init` | Create a template lota.yml |
-| `--config` | Specify config file or directory |
-| `--install-completion` | Install shell completion script (auto-detects shell) |
-| `--install-completion zsh\|bash\|fish` | Install completion for a specific shell |
-| `--completion-script zsh\|bash\|fish` | Print completion script to stdout |
+| Flag                                   | Description                                          |
+| -------------------------------------- | ---------------------------------------------------- |
+| `-h`, `--help`                         | Show help                                            |
+| `-V`                                   | Show version only (machine-friendly)                 |
+| `--version`                            | Show version with ASCII banner                       |
+| `-v`, `--verbose`                      | Enable verbose output                                |
+| `--dry-run`                            | Show commands without executing                      |
+| `--init`                               | Create a template lota.yml                           |
+| `--config`                             | Specify config file or directory                     |
+| `--install-completion`                 | Install shell completion script (auto-detects shell) |
+| `--install-completion zsh\|bash\|fish` | Install completion for a specific shell              |
+| `--completion-script zsh\|bash\|fish`  | Print completion script to stdout                    |
 
 ## 🐚 Shell Completion
 
@@ -644,16 +711,19 @@ lota --install-completion fish
 ### Manual install (print to stdout)
 
 **Bash:**
+
 ```bash
 lota --completion-script bash >> ~/.bashrc
 ```
 
 **Zsh:**
+
 ```bash
 lota --completion-script zsh > ~/.config/zsh/completions/_lota
 ```
 
 **Fish:**
+
 ```bash
 lota --completion-script fish > ~/.config/fish/completions/lota.fish
 ```
@@ -714,6 +784,7 @@ pip install pre-commit
 ```
 
 This installs:
+
 - **commit-msg hook** - validates conventional commits via cocogitto
 - **post-commit hook** - automatic version tagging
 - **pre-commit hooks** - runs go fmt, go vet, go test, and golangci-lint
@@ -766,6 +837,7 @@ Lota follows a strict layered architecture:
 - **shared/** - Constants and shared utilities
 
 Key design principles:
+
 - Stateless - no global variables
 - Context-aware execution with graceful shutdown
 - Pure functions for interpolation and parsing (testable)
@@ -773,17 +845,17 @@ Key design principles:
 
 ## 🆚 Comparison
 
-| Feature | Lota | Make | npm scripts | Just |
-|---------|------|------|-------------|------|
-| Declarative YAML | ✅ | ❌ | ❌ | ✅ |
-| Type-safe arguments | ✅ | ❌ | ❌ | ✅ |
-| Variable interpolation | ✅ | ✅ | ✅ | ✅ |
-| Nested groups | ✅ | ❌ | ❌ | ❌ |
-| Working directory (`dir`) | ✅ | ❌ | ❌ | ❌ |
-| Command dependencies | ✅ | ✅ | ❌ | ✅ |
-| Upward config search | ✅ | ❌ | ❌ | ❌ |
-| Env file imports | ✅ | ❌ | ❌ | ❌ |
-| Shell auto-detection | ✅ | ❌ | ❌ | ❌ |
+| Feature                   | Lota | Make | npm scripts | Just |
+| ------------------------- | ---- | ---- | ----------- | ---- |
+| Declarative YAML          | ✅   | ❌   | ❌          | ✅   |
+| Type-safe arguments       | ✅   | ❌   | ❌          | ✅   |
+| Variable interpolation    | ✅   | ✅   | ✅          | ✅   |
+| Nested groups             | ✅   | ❌   | ❌          | ❌   |
+| Working directory (`dir`) | ✅   | ❌   | ❌          | ❌   |
+| Command dependencies      | ✅   | ✅   | ❌          | ✅   |
+| Upward config search      | ✅   | ❌   | ❌          | ❌   |
+| Env file imports          | ✅   | ❌   | ❌          | ❌   |
+| Shell auto-detection      | ✅   | ❌   | ❌          | ❌   |
 
 ## 📜 License
 

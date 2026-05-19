@@ -110,6 +110,36 @@ func ResolveDir(app config.AppConfig, groups []*config.Group, command config.Com
 	return dir
 }
 
+// ResolveLogs collects log configs from app → groups → command with additive inheritance.
+// When Independent is true at any level, all ancestor logs are discarded (but that level's log is kept).
+func ResolveLogs(app config.AppConfig, groups []*config.Group, command config.Command) []config.LogConfig {
+	result := make([]config.LogConfig, 0)
+
+	if app.Log != nil {
+		result = append(result, *app.Log)
+	}
+
+	for _, g := range groups {
+		if g.Log != nil {
+			if g.Log.Independent {
+				result = []config.LogConfig{*g.Log}
+			} else {
+				result = append(result, *g.Log)
+			}
+		}
+	}
+
+	if command.Log != nil {
+		if command.Log.Independent {
+			result = []config.LogConfig{*command.Log}
+		} else {
+			result = append(result, *command.Log)
+		}
+	}
+
+	return result
+}
+
 func ResolveShell(app config.AppConfig, groups []*config.Group, command config.Command) string {
 	// 1. App level shell (lowest priority)
 	shell := app.Shell

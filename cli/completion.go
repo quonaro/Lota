@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"lota/config"
 	"lota/runner"
 	"os"
@@ -35,7 +36,7 @@ func RunCompleteSubcommand(args []string) {
 		point = len(line)
 	}
 
-	cfg, err := LoadConfig("")
+	cfg, err := LoadConfigWithWriter("", io.Discard)
 	if err != nil {
 		cfg = &config.AppConfig{}
 	}

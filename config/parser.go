@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -90,8 +91,8 @@ func hasField(node *yaml.Node, field string) bool {
 	return false
 }
 
-var groupFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "shell"}
-var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "depends", "shell"}
+var groupFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "shell", "log"}
+var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "depends", "shell", "log"}
 
 func suggestField(unknown string, valid []string) string {
 	best := ""
@@ -159,7 +160,76 @@ func minInt(a, b, c int) int {
 	return c
 }
 
-func ParseConfig(path string) (*AppConfig, error) {
+func parseLogConfig(node *yaml.Node, allowIndependent bool, context string) (*LogConfig, error) {
+	if node.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%d: expected mapping node for log, got %s", node.Line, nodeKindName(node.Kind))
+	}
+
+	var cfg LogConfig
+	validLogFields := map[string]bool{"path": true, "truncate": true, "independent": true}
+
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		valueNode := node.Content[i+1]
+
+		if !validLogFields[key] {
+			suggestion := suggestField(key, []string{"path", "truncate", "independent"})
+			if suggestion != "" {
+				return nil, fmt.Errorf("%d: unknown field %q in log %s\nDid you mean: %s?", node.Content[i].Line, key, context, suggestion)
+			}
+			return nil, fmt.Errorf("%d: unknown field %q in log %s", node.Content[i].Line, key, context)
+		}
+
+		switch key {
+		case "path":
+			cfg.Path = valueNode.Value
+		case "truncate":
+			var t bool
+			if err := valueNode.Decode(&t); err != nil {
+				return nil, fmt.Errorf("%d: invalid truncate in log %s: %w", valueNode.Line, context, err)
+			}
+			cfg.Truncate = t
+		case "independent":
+			var ind bool
+			if err := valueNode.Decode(&ind); err != nil {
+				return nil, fmt.Errorf("%d: invalid independent in log %s: %w", valueNode.Line, context, err)
+			}
+			if ind && !allowIndependent {
+				return nil, fmt.Errorf("%d: independent is not allowed in root-level log", valueNode.Line)
+			}
+			cfg.Independent = ind
+		}
+	}
+
+	if cfg.Path == "" {
+		return nil, fmt.Errorf("%d: log %s requires a path", node.Line, context)
+	}
+
+	return &cfg, nil
+}
+
+func normalizeImportTags(node *yaml.Node) []string {
+	seen := make(map[string]struct{})
+	var deprecated []string
+
+	var walk func(n *yaml.Node)
+	walk = func(n *yaml.Node) {
+		if n.Kind == yaml.ScalarNode && strings.HasPrefix(n.Tag, "!import:") {
+			if _, ok := seen[n.Tag]; !ok {
+				seen[n.Tag] = struct{}{}
+				deprecated = append(deprecated, n.Tag)
+			}
+			n.Tag = strings.TrimPrefix(n.Tag, "!")
+		}
+		for _, child := range n.Content {
+			walk(child)
+		}
+	}
+	walk(node)
+	return deprecated
+}
+
+func ParseConfigWithWriter(path string, warnTo io.Writer) (*AppConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -178,6 +248,13 @@ func ParseConfig(path string) (*AppConfig, error) {
 
 	if root.Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("%d: expected mapping node, got %s", root.Line, nodeKindName(root.Kind))
+	}
+
+	deprecatedTags := normalizeImportTags(root)
+	for _, tag := range deprecatedTags {
+		if warnTo != nil {
+			_, _ = fmt.Fprintf(warnTo, "\033[33mwarning: %s syntax is deprecated, use %s instead\033[0m\n", tag, strings.TrimPrefix(tag, "!"))
+		}
 	}
 
 	config := &AppConfig{
@@ -206,6 +283,12 @@ func ParseConfig(path string) (*AppConfig, error) {
 			}
 		case "shell":
 			config.Shell = valueNode.Value
+		case "log":
+			logCfg, err := parseLogConfig(valueNode, false, "at app level")
+			if err != nil {
+				return nil, err
+			}
+			config.Log = logCfg
 		default:
 			// Distinguish command (has "script" field) from group
 			if hasField(valueNode, "script") {
@@ -227,6 +310,10 @@ func ParseConfig(path string) (*AppConfig, error) {
 	}
 
 	return config, nil
+}
+
+func ParseConfig(path string) (*AppConfig, error) {
+	return ParseConfigWithWriter(path, os.Stderr)
 }
 
 func (g *Group) UnmarshalYAML(node *yaml.Node) error {
@@ -270,6 +357,12 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 					return fmt.Errorf("%d: invalid arg %q in group %q: %w", valueNode.Line, arg, g.Name, err)
 				}
 			}
+		case "log":
+			logCfg, err := parseLogConfig(valueNode, true, fmt.Sprintf("in group %q", g.Name))
+			if err != nil {
+				return err
+			}
+			g.Log = logCfg
 		default:
 			if hasField(valueNode, "script") {
 				var cmd Command
@@ -348,6 +441,12 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			if err := valueNode.Decode(&c.Depends); err != nil {
 				return fmt.Errorf("%d: error parsing depends in command %q: %w", valueNode.Line, c.Name, err)
 			}
+		case "log":
+			logCfg, err := parseLogConfig(valueNode, true, fmt.Sprintf("in command %q", c.Name))
+			if err != nil {
+				return err
+			}
+			c.Log = logCfg
 		default:
 			suggestion := suggestField(key, commandFields)
 			if suggestion != "" {
@@ -430,7 +529,6 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 		v.IsFile = true
 		if isDeprecated {
 			v.Format = strings.TrimPrefix(tag, "!import:")
-			fmt.Fprintf(os.Stderr, "\033[33mwarning: !import: syntax is deprecated, use import: instead\033[0m\n")
 		} else {
 			v.Format = strings.TrimPrefix(tag, "import:")
 		}

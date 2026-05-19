@@ -704,3 +704,140 @@ func TestParseConfig_UnknownFieldWithSuggestion(t *testing.T) {
 		t.Errorf("Expected suggestion 'inherit_color', got: %s", msg)
 	}
 }
+
+func TestParseConfig_LogAppLevel(t *testing.T) {
+	yamlContent := `
+log:
+  path: app.log
+  truncate: true
+
+build:
+  script: echo build
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	cfg, err := ParseConfig(tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to parse config: %v", err)
+	}
+
+	if cfg.Log == nil {
+		t.Fatal("Expected app-level log config")
+	}
+	if cfg.Log.Path != "app.log" {
+		t.Errorf("Expected path 'app.log', got %q", cfg.Log.Path)
+	}
+	if !cfg.Log.Truncate {
+		t.Error("Expected truncate to be true")
+	}
+	if cfg.Log.Independent {
+		t.Error("Expected independent to be false")
+	}
+}
+
+func TestParseConfig_LogGroupAndCommand(t *testing.T) {
+	yamlContent := `
+dev:
+  desc: Dev group
+  log:
+    path: group.log
+    independent: true
+  build:
+    script: echo build
+    log:
+      path: cmd.log
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	cfg, err := ParseConfig(tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to parse config: %v", err)
+	}
+
+	if len(cfg.Groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(cfg.Groups))
+	}
+	grp := cfg.Groups[0]
+	if grp.Log == nil || grp.Log.Path != "group.log" || !grp.Log.Independent {
+		t.Error("Expected group log with independent=true")
+	}
+
+	if len(grp.Commands) != 1 {
+		t.Fatalf("Expected 1 command, got %d", len(grp.Commands))
+	}
+	cmd := grp.Commands[0]
+	if cmd.Log == nil || cmd.Log.Path != "cmd.log" {
+		t.Error("Expected command log with path 'cmd.log'")
+	}
+}
+
+func TestParseConfig_LogAppIndependentRejected(t *testing.T) {
+	yamlContent := `
+log:
+  path: app.log
+  independent: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	_, err := ParseConfig(tmpFile)
+	if err == nil {
+		t.Fatal("Expected error for independent at app level")
+	}
+	if !strings.Contains(err.Error(), "independent is not allowed") {
+		t.Errorf("Expected 'independent is not allowed' error, got: %s", err.Error())
+	}
+}
+
+func TestParseConfig_LogMissingPath(t *testing.T) {
+	yamlContent := `
+log:
+  truncate: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	_, err := ParseConfig(tmpFile)
+	if err == nil {
+		t.Fatal("Expected error for log without path")
+	}
+	if !strings.Contains(err.Error(), "requires a path") {
+		t.Errorf("Expected 'requires a path' error, got: %s", err.Error())
+	}
+}
+
+func TestParseConfig_LogUnknownFieldWithSuggestion(t *testing.T) {
+	yamlContent := `
+build:
+  script: echo hi
+  log:
+    path: build.log
+    truncat: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	_, err := ParseConfig(tmpFile)
+	if err == nil {
+		t.Fatal("Expected error for unknown log field")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "unknown field") {
+		t.Errorf("Expected 'unknown field' in error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "Did you mean") {
+		t.Errorf("Expected 'Did you mean' suggestion in error, got: %s", msg)
+	}
+}

@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"lota/config"
 	"os"
 	"os/exec"
@@ -19,6 +20,7 @@ type RunOptions struct {
 	ConfigDir  string        // base directory for resolving relative dir paths
 	WorkingDir string        // caller's current working directory
 	Timeout    time.Duration // 0 means no timeout
+	Logs       []config.LogConfig
 }
 
 // ShellError represents a non-zero exit from a shell command.
@@ -49,8 +51,69 @@ func resolveDir(baseDir, workingDir, dir string) string {
 	return filepath.Join(baseDir, dir)
 }
 
-// executeShell runs a script in shell with environment variables
-func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string) error {
+// openLogFile opens a log file with the given path and truncate flag.
+// Returns the file and a bool indicating success (false if skipped due to error).
+func openLogFile(path string, truncate bool, dryRun bool) (*os.File, bool) {
+	if dryRun {
+		fmt.Printf("[dry-run] log: %s\n", path)
+		return nil, false
+	}
+
+	// Ensure parent directories exist
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "[log error] %s: failed to create parent directories: %v\n", path, err)
+		return nil, false
+	}
+
+	// Verify it's not a directory
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		fmt.Fprintf(os.Stderr, "[log error] %s: path is a directory\n", path)
+		return nil, false
+	}
+
+	flag := os.O_CREATE | os.O_WRONLY
+	if truncate {
+		flag |= os.O_TRUNC
+	} else {
+		flag |= os.O_APPEND
+	}
+
+	f, err := os.OpenFile(path, flag, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[log error] %s: %v\n", path, err)
+		return nil, false
+	}
+
+	return f, true
+}
+
+// closeLogFiles closes all opened log files, swallowing errors.
+func closeLogFiles(files []*os.File) {
+	for _, f := range files {
+		if f != nil {
+			_ = f.Close()
+		}
+	}
+}
+
+// executeShell runs a script in shell with environment variables and optional tee logging.
+func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string, logs []config.LogConfig, interpCtx InterpolationContext, dryRun bool) error {
+	// In dry-run mode, only print log targets and skip execution
+	if dryRun {
+		for _, logCfg := range logs {
+			interpolatedPath, err := Interpolate(logCfg.Path, interpCtx)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[dry-run] log error: %s: interpolation failed: %v\n", logCfg.Path, err)
+				continue
+			}
+			if !filepath.IsAbs(interpolatedPath) {
+				interpolatedPath = filepath.Join(baseDir, interpolatedPath)
+			}
+			fmt.Printf("[dry-run] log: %s\n", interpolatedPath)
+		}
+		return nil
+	}
+
 	// Split shell command and flags (e.g., "bash -c" -> ["bash", "-c"])
 	parts := strings.Fields(shell)
 	if len(parts) == 0 {
@@ -58,10 +121,38 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 	}
 	cmd := exec.CommandContext(ctx, parts[0], append(parts[1:], script)...)
 	cmd.Env = append(os.Environ(), env...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	cmd.Dir = resolveDir(baseDir, workingDir, dir)
-	if err := cmd.Run(); err != nil {
+
+	// Resolve log paths and open files
+	var logFiles []*os.File
+	stdoutWriters := []io.Writer{os.Stdout}
+	stderrWriters := []io.Writer{os.Stderr}
+
+	for _, logCfg := range logs {
+		interpolatedPath, err := Interpolate(logCfg.Path, interpCtx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[log error] %s: interpolation failed: %v\n", logCfg.Path, err)
+			continue
+		}
+		// Resolve relative paths against ConfigDir
+		if !filepath.IsAbs(interpolatedPath) {
+			interpolatedPath = filepath.Join(baseDir, interpolatedPath)
+		}
+		f, ok := openLogFile(interpolatedPath, logCfg.Truncate, dryRun)
+		if ok {
+			logFiles = append(logFiles, f)
+			stdoutWriters = append(stdoutWriters, f)
+			stderrWriters = append(stderrWriters, f)
+		}
+	}
+
+	cmd.Stdout = io.MultiWriter(stdoutWriters...)
+	cmd.Stderr = io.MultiWriter(stderrWriters...)
+
+	err := cmd.Run()
+	closeLogFiles(logFiles)
+
+	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return &ShellError{
 				ExitCode: exitErr.ExitCode(),
@@ -135,10 +226,9 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] before:\n%s\n", interpolatedBefore)
-		} else {
-			if err := executeShell(ctx, interpolatedBefore, env, shell, opts.ConfigDir, opts.WorkingDir, dir); err != nil {
-				return fmt.Errorf("before hook failed: %w", err)
-			}
+		}
+		if err := executeShell(ctx, interpolatedBefore, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun); err != nil {
+			return fmt.Errorf("before hook failed: %w", err)
 		}
 	}
 
@@ -153,7 +243,8 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] script:\n%s\n", interpolatedScript)
-		} else if err := executeShell(ctx, interpolatedScript, env, shell, opts.ConfigDir, opts.WorkingDir, dir); err != nil {
+		}
+		if err := executeShell(ctx, interpolatedScript, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun); err != nil {
 			scriptErr = err
 		}
 	}
@@ -169,7 +260,8 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] after:\n%s\n", interpolatedAfter)
-		} else if err := executeShell(ctx, interpolatedAfter, env, shell, opts.ConfigDir, opts.WorkingDir, dir); err != nil {
+		}
+		if err := executeShell(ctx, interpolatedAfter, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun); err != nil {
 			if scriptErr != nil {
 				fmt.Fprintf(os.Stderr, "after hook failed: %v\n", err)
 			} else {

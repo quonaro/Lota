@@ -412,6 +412,103 @@ func TestExecuteCommand_CWDSubdir(t *testing.T) {
 	}
 }
 
+func TestExecuteCommand_TeeLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "test.log")
+
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "echo hello-tee",
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+	opts := RunOptions{
+		ConfigDir: tmpDir,
+		Logs: []config.LogConfig{
+			{Path: "test.log", Truncate: true},
+		},
+	}
+
+	if err := ExecuteCommand(context.Background(), cmd, ctx, opts, "sh -c", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(data), "hello-tee") {
+		t.Errorf("expected log file to contain 'hello-tee', got: %q", string(data))
+	}
+}
+
+func TestExecuteCommand_TeeLoggingAppend(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "append.log")
+	if err := os.WriteFile(logFile, []byte("existing\n"), 0644); err != nil {
+		t.Fatalf("failed to seed log file: %v", err)
+	}
+
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "echo appended",
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+	opts := RunOptions{
+		ConfigDir: tmpDir,
+		Logs: []config.LogConfig{
+			{Path: "append.log", Truncate: false},
+		},
+	}
+
+	if err := ExecuteCommand(context.Background(), cmd, ctx, opts, "sh -c", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "existing") {
+		t.Errorf("expected log file to still contain 'existing', got: %q", content)
+	}
+	if !strings.Contains(content, "appended") {
+		t.Errorf("expected log file to contain 'appended', got: %q", content)
+	}
+}
+
+func TestExecuteCommand_TeeLoggingInterpolation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "echo interpolated",
+	}
+	ctx := InterpolationContext{
+		Vars: map[string]string{"NAME": "mylog"},
+		Args: map[string]string{},
+	}
+	opts := RunOptions{
+		ConfigDir: tmpDir,
+		Logs: []config.LogConfig{
+			{Path: "$NAME", Truncate: true},
+		},
+	}
+
+	if err := ExecuteCommand(context.Background(), cmd, ctx, opts, "sh -c", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	logFile := filepath.Join(tmpDir, "mylog")
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(data), "interpolated") {
+		t.Errorf("expected log file to contain 'interpolated', got: %q", string(data))
+	}
+}
+
 func TestResolveDir_Unit(t *testing.T) {
 	tests := []struct {
 		name       string

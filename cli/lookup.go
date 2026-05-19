@@ -3,12 +3,12 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"lota/config"
 	"lota/runner"
+	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 // FindCommandByPath finds a command by its full dot-separated path (e.g., "infra.docker.up").
@@ -116,12 +116,16 @@ func ResolveDependencies(cfg *config.AppConfig, result config.SearchResult) ([]c
 // LoadConfig loads and indexes the configuration.
 // configPath can be empty (uses default lota.yml or lota.yaml), a file path, or a directory.
 func LoadConfig(configPath string) (*config.AppConfig, error) {
+	return LoadConfigWithWriter(configPath, os.Stderr)
+}
+
+func LoadConfigWithWriter(configPath string, warnTo io.Writer) (*config.AppConfig, error) {
 	fc, err := config.GetConfigPath(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := config.ParseConfig(fc.Path)
+	cfg, err := config.ParseConfigWithWriter(fc.Path, warnTo)
 	if err != nil {
 		return nil, fmt.Errorf("%s:%w", filepath.Base(fc.Path), err)
 	}
@@ -131,11 +135,15 @@ func LoadConfig(configPath string) (*config.AppConfig, error) {
 
 	// Print warnings if any
 	for _, warning := range result.Warnings {
-		color.Yellow("Warning: %s\n", warning)
+		if warnTo != nil {
+			_, _ = fmt.Fprintf(warnTo, "Warning: %s\n", warning)
+		}
 	}
 
 	if result.Error != nil {
-		color.Red("Error: %v\n\n", result.Error)
+		if warnTo != nil {
+			_, _ = fmt.Fprintf(warnTo, "Error: %v\n\n", result.Error)
+		}
 		return nil, result.Error
 	}
 
@@ -209,6 +217,9 @@ func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result con
 		ArgDefs: args,
 	}
 
+	logs := runner.ResolveLogs(*cfg, result.Groups, *result.Command)
+	opts.Logs = logs
+
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
 	return runner.ExecuteCommand(ctx, result.Command, context, opts, shell, dir)
@@ -248,6 +259,9 @@ func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 		Args:    parsedArgs,
 		ArgDefs: args,
 	}
+
+	logs := runner.ResolveLogs(*cfg, result.Groups, *result.Command)
+	opts.Logs = logs
 
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 

@@ -1,8 +1,12 @@
+# Global tee logging: all commands inherit this unless independent is set
+log:
+  path: logs/all.log
+
 vars:
 - ENV_VAR_1=value1
-- !import:env .env
+- import:env .env
 - ENV_VAR_2=value2
-- !import:yaml env.yml@public app_name
+- import:yaml env.yml@public app_name
 
 helpwor:
   script: echo $app_name.app_name
@@ -10,12 +14,19 @@ helpwor:
 group1:
   desc: Test group 1 description
   color: cyan
+  # Group-level log: commands in this group write to both logs/all.log and logs/group1.log
+  log:
+    path: logs/group1.log
   args:
   - environment|env:str="prod"
   - timeout:int=30
   command1:
     desc: Test command 1
     inherit_color: true
+    # Command-level log with truncate: writes to all.log + group1.log + build.log
+    log:
+      path: logs/build.log
+      truncate: true
     args:
     - param1:str
     - param2|p:int=10
@@ -55,6 +66,10 @@ group1:
 group2:
   desc: Test group 2 description
   color: yellow
+  # Independent group log: commands here write ONLY to logs/group2.log
+  log:
+    path: logs/group2.log
+    independent: true
   command5:
     desc: Test command 5 with positional and wildcard
     args:
@@ -79,6 +94,9 @@ command6:
 
 hello-world:
   desc: "Test Command"
+  # Simple command-level log with append (default)
+  log:
+    path: logs/hello.log
   args:
   - name|n:str
   script: |
@@ -87,7 +105,7 @@ hello-world:
 test-import:
   desc: Test YAML import
   vars:
-  - !import:yaml env.yml app
+  - import:yaml env.yml app
   script: |
     echo "app_name=$app.public.app_name"
     echo "version=$app.public.version"

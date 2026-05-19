@@ -2,13 +2,20 @@ package config
 
 import "fmt"
 
+type LogConfig struct {
+	Path        string `yaml:"path"`
+	Truncate    bool   `yaml:"truncate,omitempty"`
+	Independent bool   `yaml:"independent,omitempty"`
+}
+
 type AppConfig struct {
-	Shell    string    `yaml:"shell,omitempty"`
-	Vars     []Var     `yaml:"vars"`
-	Args     []Arg     `yaml:"-"`
-	RawArgs  []string  `yaml:"args"`
-	Groups   []Group   `yaml:"groups"`
-	Commands []Command `yaml:"commands"`
+	Shell    string     `yaml:"shell,omitempty"`
+	Vars     []Var      `yaml:"vars"`
+	Args     []Arg      `yaml:"-"`
+	RawArgs  []string   `yaml:"args"`
+	Log      *LogConfig `yaml:"log,omitempty"`
+	Groups   []Group    `yaml:"groups"`
+	Commands []Command  `yaml:"commands"`
 
 	// Indexes
 	commandsMap map[string]Command
@@ -19,12 +26,13 @@ type Group struct {
 	Shell        string `yaml:"shell,omitempty"`
 	Dir          string `yaml:"dir,omitempty"`
 	Name         string
-	Desc         string   `yaml:"desc"`
-	Color        string   `yaml:"color,omitempty"`
-	InheritColor *bool    `yaml:"inherit_color,omitempty"`
-	Vars         []Var    `yaml:"vars"`
-	Args         []Arg    `yaml:"-"`
-	RawArgs      []string `yaml:"args"`
+	Desc         string     `yaml:"desc"`
+	Color        string     `yaml:"color,omitempty"`
+	InheritColor *bool      `yaml:"inherit_color,omitempty"`
+	Vars         []Var      `yaml:"vars"`
+	Args         []Arg      `yaml:"-"`
+	RawArgs      []string   `yaml:"args"`
+	Log          *LogConfig `yaml:"log,omitempty"`
 	Commands     []Command
 	Groups       []Group
 
@@ -37,16 +45,17 @@ type Command struct {
 	Shell        string `yaml:"shell,omitempty"`
 	Dir          string `yaml:"dir,omitempty"`
 	Name         string
-	Desc         string   `yaml:"desc"`
-	Color        string   `yaml:"color,omitempty"`
-	InheritColor *bool    `yaml:"inherit_color,omitempty"`
-	Vars         []Var    `yaml:"vars"`
-	Args         []Arg    `yaml:"-"`
-	RawArgs      []string `yaml:"args"`
-	Depends      []string `yaml:"depends,omitempty"`
-	Script       string   `yaml:"script"`
-	Before       string   `yaml:"before"`
-	After        string   `yaml:"after"`
+	Desc         string     `yaml:"desc"`
+	Color        string     `yaml:"color,omitempty"`
+	InheritColor *bool      `yaml:"inherit_color,omitempty"`
+	Vars         []Var      `yaml:"vars"`
+	Args         []Arg      `yaml:"-"`
+	RawArgs      []string   `yaml:"args"`
+	Log          *LogConfig `yaml:"log,omitempty"`
+	Depends      []string   `yaml:"depends,omitempty"`
+	Script       string     `yaml:"script"`
+	Before       string     `yaml:"before"`
+	After        string     `yaml:"after"`
 }
 
 type Arg struct {

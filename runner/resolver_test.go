@@ -348,6 +348,127 @@ func TestResolveDir(t *testing.T) {
 	}
 }
 
+func TestResolveLogs(t *testing.T) {
+	path := func(s string) *config.LogConfig {
+		return &config.LogConfig{Path: s}
+	}
+	indPath := func(s string) *config.LogConfig {
+		return &config.LogConfig{Path: s, Independent: true}
+	}
+
+	tests := []struct {
+		name     string
+		app      config.AppConfig
+		groups   []*config.Group
+		command  config.Command
+		expected []config.LogConfig
+	}{
+		{
+			name:     "no logs",
+			app:      config.AppConfig{},
+			groups:   nil,
+			command:  config.Command{Name: "cmd"},
+			expected: []config.LogConfig{},
+		},
+		{
+			name:    "app log only",
+			app:     config.AppConfig{Log: path("app.log")},
+			groups:  nil,
+			command: config.Command{Name: "cmd"},
+			expected: []config.LogConfig{
+				{Path: "app.log"},
+			},
+		},
+		{
+			name:    "app + group additive",
+			app:     config.AppConfig{Log: path("app.log")},
+			groups:  []*config.Group{{Name: "dev", Log: path("group.log")}},
+			command: config.Command{Name: "cmd"},
+			expected: []config.LogConfig{
+				{Path: "app.log"},
+				{Path: "group.log"},
+			},
+		},
+		{
+			name: "app + group + command additive",
+			app:  config.AppConfig{Log: path("app.log")},
+			groups: []*config.Group{
+				{Name: "dev", Log: path("group.log")},
+			},
+			command: config.Command{Name: "cmd", Log: path("cmd.log")},
+			expected: []config.LogConfig{
+				{Path: "app.log"},
+				{Path: "group.log"},
+				{Path: "cmd.log"},
+			},
+		},
+		{
+			name:    "group independent resets ancestors",
+			app:     config.AppConfig{Log: path("app.log")},
+			groups:  []*config.Group{{Name: "dev", Log: indPath("group.log")}},
+			command: config.Command{Name: "cmd"},
+			expected: []config.LogConfig{
+				{Path: "group.log", Independent: true},
+			},
+		},
+		{
+			name: "command independent resets all",
+			app:  config.AppConfig{Log: path("app.log")},
+			groups: []*config.Group{
+				{Name: "dev", Log: path("group.log")},
+			},
+			command: config.Command{Name: "cmd", Log: indPath("cmd.log")},
+			expected: []config.LogConfig{
+				{Path: "cmd.log", Independent: true},
+			},
+		},
+		{
+			name: "nested group independent",
+			app:  config.AppConfig{Log: path("app.log")},
+			groups: []*config.Group{
+				{Name: "outer", Log: path("outer.log")},
+				{Name: "inner", Log: indPath("inner.log")},
+			},
+			command: config.Command{Name: "cmd", Log: path("cmd.log")},
+			expected: []config.LogConfig{
+				{Path: "inner.log", Independent: true},
+				{Path: "cmd.log"},
+			},
+		},
+		{
+			name:    "group without log inherits app",
+			app:     config.AppConfig{Log: path("app.log")},
+			groups:  []*config.Group{{Name: "dev"}},
+			command: config.Command{Name: "cmd", Log: path("cmd.log")},
+			expected: []config.LogConfig{
+				{Path: "app.log"},
+				{Path: "cmd.log"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ResolveLogs(tt.app, tt.groups, tt.command)
+			if !logConfigsEqual(result, tt.expected) {
+				t.Errorf("ResolveLogs() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func logConfigsEqual(a, b []config.LogConfig) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Path != b[i].Path || a[i].Truncate != b[i].Truncate || a[i].Independent != b[i].Independent {
+			return false
+		}
+	}
+	return true
+}
+
 func argsSlicesEqual(a, b []config.Arg) bool {
 	if len(a) != len(b) {
 		return false

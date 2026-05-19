@@ -20,9 +20,17 @@ const defaultInitTemplate = `# lota.yml
 vars:
 - PROJECT=myproject
 
+# Global tee logging: applies to all commands
+log:
+  path: logs/all.log
+
 hello:
   desc: Print a greeting
   script: echo "Hello, $PROJECT!"
+  # Command-level log: writes to both logs/all.log and logs/hello.log
+  log:
+    path: logs/hello.log
+    truncate: true
 `
 
 var ansiColors = map[string]func(string, ...interface{}) string{

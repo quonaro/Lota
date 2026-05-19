@@ -13,6 +13,37 @@ import (
 	"time"
 )
 
+// PrefixWriter wraps an io.Writer and prefixes each line with a task name.
+type PrefixWriter struct {
+	Writer io.Writer
+	Prefix string
+	buf    []byte
+}
+
+func (pw *PrefixWriter) Write(p []byte) (n int, err error) {
+	for i, b := range p {
+		pw.buf = append(pw.buf, b)
+		if b == '\n' {
+			if _, err := fmt.Fprintf(pw.Writer, "%s %s", pw.Prefix, pw.buf); err != nil {
+				return i, err
+			}
+			pw.buf = pw.buf[:0]
+		}
+	}
+	return len(p), nil
+}
+
+// Flush writes any remaining buffered bytes without a trailing newline.
+func (pw *PrefixWriter) Flush() error {
+	if len(pw.buf) > 0 {
+		if _, err := fmt.Fprintf(pw.Writer, "%s %s\n", pw.Prefix, pw.buf); err != nil {
+			return err
+		}
+		pw.buf = pw.buf[:0]
+	}
+	return nil
+}
+
 // RunOptions controls execution behavior
 type RunOptions struct {
 	Verbose    bool
@@ -97,7 +128,8 @@ func closeLogFiles(files []*os.File) {
 }
 
 // executeShell runs a script in shell with environment variables and optional tee logging.
-func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string, logs []config.LogConfig, interpCtx InterpolationContext, dryRun bool) error {
+// If stdout/stderr are nil, os.Stdout/os.Stderr are used.
+func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string, logs []config.LogConfig, interpCtx InterpolationContext, dryRun bool, stdout, stderr io.Writer) error {
 	// In dry-run mode, only print log targets and skip execution
 	if dryRun {
 		for _, logCfg := range logs {
@@ -127,6 +159,12 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 	var logFiles []*os.File
 	stdoutWriters := []io.Writer{os.Stdout}
 	stderrWriters := []io.Writer{os.Stderr}
+	if stdout != nil {
+		stdoutWriters = []io.Writer{stdout}
+	}
+	if stderr != nil {
+		stderrWriters = []io.Writer{stderr}
+	}
 
 	for _, logCfg := range logs {
 		interpolatedPath, err := Interpolate(logCfg.Path, interpCtx)
@@ -227,7 +265,7 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		if opts.DryRun {
 			fmt.Printf("[dry-run] %s:\n%s\n", name, interpolated)
 		}
-		return executeShell(ctx, interpolated, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun)
+		return executeShell(ctx, interpolated, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun, nil, nil)
 	}
 
 	// before hook
@@ -265,6 +303,97 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 	if cmd.Finally != "" {
 		if err := runStage("finally", cmd.Finally); err != nil {
 			fmt.Fprintf(os.Stderr, "finally hook failed: %v\n", err)
+		}
+	}
+
+	return execErr
+}
+
+// ExecuteCommandWithPrefix is like ExecuteCommand but prefixes each line of output with the given prefix.
+func ExecuteCommandWithPrefix(ctx context.Context, cmd *config.Command, interpCtx InterpolationContext, opts RunOptions, shell string, dir string, prefix string) error {
+	stdout := &PrefixWriter{Writer: os.Stdout, Prefix: prefix}
+	stderr := &PrefixWriter{Writer: os.Stderr, Prefix: prefix}
+	defer func() { _ = stdout.Flush() }()
+	defer func() { _ = stderr.Flush() }()
+
+	unified := MergeVarsAndArgs(interpCtx.Vars, interpCtx.Args)
+	env := VarsToEnv(unified)
+	envKeys := sortedMapKeys(unified)
+
+	if opts.Verbose {
+		fmt.Printf("[verbose] command: %s\n", cmd.Name)
+		fmt.Println("[verbose] env:")
+		for _, k := range envKeys {
+			fmt.Printf("  %s=%s\n", k, unified[k])
+		}
+	}
+
+	if opts.DryRun {
+		fmt.Println("[dry-run] env:")
+		for _, k := range envKeys {
+			fmt.Printf("  %s=%s\n", k, unified[k])
+		}
+	}
+
+	// Apply timeout if specified
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
+
+	var execErr error
+	failed := false
+
+	runStage := func(name, script string) error {
+		interpolated, err := Interpolate(script, interpCtx)
+		if err != nil {
+			return fmt.Errorf("%s hook interpolation failed: %w", name, err)
+		}
+		if opts.Verbose {
+			fmt.Printf("[verbose] %s: %s\n", name, interpolated)
+		}
+		if opts.DryRun {
+			fmt.Printf("[dry-run] %s:\n%s\n", name, interpolated)
+		}
+		return executeShell(ctx, interpolated, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun, stdout, stderr)
+	}
+
+	// before hook
+	if cmd.Before != "" {
+		if err := runStage("before", cmd.Before); err != nil {
+			execErr = fmt.Errorf("before hook failed: %w", err)
+			failed = true
+		}
+	}
+
+	// script
+	if !failed && cmd.Script != "" {
+		if err := runStage("script", cmd.Script); err != nil {
+			execErr = err
+			failed = true
+		}
+	}
+
+	// after hook — runs only if before and script succeeded
+	if !failed && cmd.After != "" {
+		if err := runStage("after", cmd.After); err != nil {
+			execErr = fmt.Errorf("after hook failed: %w", err)
+			failed = true
+		}
+	}
+
+	// fallback hook — runs on any error in before/script/after
+	if failed && cmd.Fallback != "" {
+		if err := runStage("fallback", cmd.Fallback); err != nil {
+			fmt.Fprintf(os.Stderr, "%s fallback hook failed: %v\n", prefix, err)
+		}
+	}
+
+	// finally hook — always runs at the end
+	if cmd.Finally != "" {
+		if err := runStage("finally", cmd.Finally); err != nil {
+			fmt.Fprintf(os.Stderr, "%s finally hook failed: %v\n", prefix, err)
 		}
 	}
 

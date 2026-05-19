@@ -53,6 +53,7 @@ type Command struct {
 	RawArgs      []string   `yaml:"args"`
 	Log          *LogConfig `yaml:"log,omitempty"`
 	Depends      []string   `yaml:"depends,omitempty"`
+	Parallel     *bool      `yaml:"parallel,omitempty"`
 	Script       string     `yaml:"script"`
 	Before       string     `yaml:"before"`
 	After        string     `yaml:"after"`

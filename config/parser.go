@@ -92,7 +92,7 @@ func hasField(node *yaml.Node, field string) bool {
 }
 
 var groupFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "shell", "log"}
-var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "shell", "log"}
+var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log"}
 
 func suggestField(unknown string, valid []string) string {
 	best := ""
@@ -445,6 +445,12 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			if err := valueNode.Decode(&c.Depends); err != nil {
 				return fmt.Errorf("%d: error parsing depends in command %q: %w", valueNode.Line, c.Name, err)
 			}
+		case "parallel":
+			var parallel bool
+			if err := valueNode.Decode(&parallel); err != nil {
+				return fmt.Errorf("%d: invalid parallel value in command %q: %w", valueNode.Line, c.Name, err)
+			}
+			c.Parallel = &parallel
 		case "log":
 			logCfg, err := parseLogConfig(valueNode, true, fmt.Sprintf("in command %q", c.Name))
 			if err != nil {

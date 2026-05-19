@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // FindCommandByPath finds a command by its full dot-separated path (e.g., "infra.docker.up").
@@ -199,7 +200,8 @@ func ResolveCommand(cfg *config.AppConfig, cliArgs []string) (config.SearchResul
 }
 
 // executeSingleCommand runs a single command result with empty CLI args (for dependencies).
-func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, opts runner.RunOptions) error {
+// If prefix is non-empty, output is prefixed like "[taskname] output...".
+func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, opts runner.RunOptions, prefix string) error {
 	args := runner.ResolveArgs(*cfg, result.Groups, *result.Command)
 
 	shell := runner.ResolveShell(*cfg, result.Groups, *result.Command)
@@ -222,7 +224,80 @@ func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result con
 
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
+	if prefix != "" {
+		return runner.ExecuteCommandWithPrefix(ctx, result.Command, context, opts, shell, dir, prefix)
+	}
 	return runner.ExecuteCommand(ctx, result.Command, context, opts, shell, dir)
+}
+
+// resolveDependencyLevels groups dependencies into topological waves.
+// Each inner slice contains commands that can run in parallel.
+func resolveDependencyLevels(cfg *config.AppConfig, result config.SearchResult) ([][]config.SearchResult, error) {
+	deps, err := ResolveDependencies(cfg, result)
+	if err != nil {
+		return nil, err
+	}
+
+	depth := make(map[string]int)
+	visited := make(map[string]bool)
+
+	var computeDepth func(cmd *config.Command, groups []*config.Group) int
+	computeDepth = func(cmd *config.Command, groups []*config.Group) int {
+		path := commandPath(cmd, groups)
+		if d, ok := depth[path]; ok {
+			return d
+		}
+		if visited[path] {
+			return 0 // circular — already detected by ResolveDependencies
+		}
+		visited[path] = true
+
+		maxDepDepth := -1
+		for _, depPath := range cmd.Depends {
+			depResult, err := FindCommandByPath(cfg, depPath)
+			if err != nil {
+				continue
+			}
+			d := computeDepth(depResult.Command, depResult.Groups)
+			if d > maxDepDepth {
+				maxDepDepth = d
+			}
+		}
+
+		visited[path] = false
+		d := maxDepDepth + 1
+		depth[path] = d
+		return d
+	}
+
+	// Pre-compute depth for all dependencies
+	for _, dep := range deps {
+		computeDepth(dep.Command, dep.Groups)
+	}
+
+	// Group by depth
+	maxDepth := -1
+	for _, d := range depth {
+		if d > maxDepth {
+			maxDepth = d
+		}
+	}
+
+	levels := make([][]config.SearchResult, maxDepth+1)
+	for _, dep := range deps {
+		d := depth[commandPath(dep.Command, dep.Groups)]
+		levels[d] = append(levels[d], dep)
+	}
+
+	// Remove empty levels
+	var resultLevels [][]config.SearchResult
+	for _, level := range levels {
+		if len(level) > 0 {
+			resultLevels = append(resultLevels, level)
+		}
+	}
+
+	return resultLevels, nil
 }
 
 // RunCommand executes a command with CLI arguments, including dependencies.
@@ -231,15 +306,26 @@ func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 		return fmt.Errorf("not a command")
 	}
 
-	deps, err := ResolveDependencies(cfg, result)
+	levels, err := resolveDependencyLevels(cfg, result)
 	if err != nil {
 		return err
 	}
 
-	for _, dep := range deps {
-		fmt.Printf("=> Running dependency: %s\n", commandPath(dep.Command, dep.Groups))
-		if err := executeSingleCommand(ctx, cfg, dep, opts); err != nil {
-			return fmt.Errorf("dependency failed: %w", err)
+	// Determine execution mode from target command
+	parallel := result.Command.Parallel == nil || *result.Command.Parallel
+
+	for _, level := range levels {
+		if parallel && len(level) > 1 {
+			if err := runLevelParallel(ctx, cfg, level, opts); err != nil {
+				return err
+			}
+		} else {
+			for _, dep := range level {
+				fmt.Printf("=> Running dependency: %s\n", commandPath(dep.Command, dep.Groups))
+				if err := executeSingleCommand(ctx, cfg, dep, opts, ""); err != nil {
+					return fmt.Errorf("dependency failed: %w", err)
+				}
+			}
 		}
 	}
 
@@ -266,4 +352,47 @@ func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
 	return runner.ExecuteCommand(ctx, result.Command, context, opts, shell, dir)
+}
+
+// runLevelParallel executes a wave of dependencies in parallel with fail-fast.
+func runLevelParallel(ctx context.Context, cfg *config.AppConfig, level []config.SearchResult, opts runner.RunOptions) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type depErr struct {
+		path string
+		err  error
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan depErr, len(level))
+
+	for _, dep := range level {
+		wg.Add(1)
+		go func(dep config.SearchResult) {
+			defer wg.Done()
+			path := commandPath(dep.Command, dep.Groups)
+			prefix := fmt.Sprintf("[%s]", path)
+			if err := executeSingleCommand(ctx, cfg, dep, opts, prefix); err != nil {
+				if ctx.Err() == context.Canceled {
+					return // cancelled by another failure
+				}
+				errCh <- depErr{path: path, err: err}
+				cancel()
+			}
+		}(dep)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	var firstErr error
+	for de := range errCh {
+		if firstErr == nil {
+			firstErr = fmt.Errorf("dependency %s failed: %w", de.path, de.err)
+		}
+	}
+	return firstErr
 }

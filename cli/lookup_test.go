@@ -138,6 +138,83 @@ func TestResolveDependencies(t *testing.T) {
 	})
 }
 
+func TestResolveDependencyLevels(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "compile", Script: "echo compile"},
+			{Name: "build", Script: "echo build", Depends: []string{"compile"}},
+			{Name: "lint", Script: "echo lint"},
+			{Name: "test", Script: "echo test", Depends: []string{"build", "lint"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	result, _ := FindCommandByPath(cfg, "test")
+	levels, err := resolveDependencyLevels(cfg, result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(levels) != 2 {
+		t.Fatalf("expected 2 levels, got %d", len(levels))
+	}
+
+	// Level 0: compile, lint (no deps)
+	lvl0 := levels[0]
+	if len(lvl0) != 2 {
+		t.Errorf("level 0 expected 2 commands, got %d", len(lvl0))
+	}
+	names := make([]string, len(lvl0))
+	for i, r := range lvl0 {
+		names[i] = r.Command.Name
+	}
+	if !contains(names, "compile") || !contains(names, "lint") {
+		t.Errorf("level 0 expected [compile lint], got %v", names)
+	}
+
+	// Level 1: build (depends on compile)
+	lvl1 := levels[1]
+	if len(lvl1) != 1 || lvl1[0].Command.Name != "build" {
+		t.Errorf("level 1 expected [build], got %v", lvl1)
+	}
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+func TestResolveDependencyLevels_ParallelFalse(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "a", Script: "echo a"},
+			{Name: "b", Script: "echo b"},
+			{Name: "c", Script: "echo c", Depends: []string{"a", "b"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	result, _ := FindCommandByPath(cfg, "c")
+	levels, err := resolveDependencyLevels(cfg, result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(levels) != 1 {
+		t.Fatalf("expected 1 level, got %d", len(levels))
+	}
+	if len(levels[0]) != 2 {
+		t.Fatalf("expected 2 commands in level 0, got %d", len(levels[0]))
+	}
+}
+
 func TestRunCommand_PrintsDependencyProgress(t *testing.T) {
 	cfg := &config.AppConfig{
 		Commands: []config.Command{

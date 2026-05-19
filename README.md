@@ -643,7 +643,30 @@ deploy:
 
 Dependencies execute with **their own context** (shell, vars, dir, default args). Circular dependencies are detected automatically and produce an error.
 
-> **TODO:** Parallel execution of independent dependencies is not yet implemented. All dependencies run sequentially.
+Independent dependencies run **in parallel by default**, with output prefixed by task name (like Docker Compose):
+
+```bash
+[build]  go build -o bin/app .
+[lint]   golangci-lint run
+[build]  ✓ done
+[lint]   ✓ done
+[deploy] ./deploy.sh
+```
+
+To force sequential execution, set `parallel: false`:
+
+```yaml
+ci:
+  depends:
+    - lint
+    - test
+  parallel: false
+  script: echo "CI done"
+```
+
+> Shared dependencies are executed **once** (deduplication). If `build` is a dependency of both `test` and `deploy`, running `lota deploy` will execute `build` exactly once.
+
+> **TODO:** A TUI for interactive task monitoring is under consideration for future versions.
 
 ### ⚡ Hooks Tutorial
 

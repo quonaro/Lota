@@ -199,9 +199,24 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 		}
 	}
 
-	assignOutput(cmd, stdoutWriters, stderrWriters)
+	needsPTY := len(stdoutWriters) != 1 || stdoutWriters[0] != os.Stdout ||
+		len(stderrWriters) != 1 || stderrWriters[0] != os.Stderr
 
-	err := cmd.Run()
+	var err error
+	if needsPTY {
+		stdoutMW := io.MultiWriter(stdoutWriters...)
+		stderrMW := io.MultiWriter(stderrWriters...)
+		used, ptyErr := runWithPTY(cmd, stdoutMW, stderrMW)
+		if !used {
+			assignOutput(cmd, stdoutWriters, stderrWriters)
+			err = cmd.Run()
+		} else {
+			err = ptyErr
+		}
+	} else {
+		assignOutput(cmd, stdoutWriters, stderrWriters)
+		err = cmd.Run()
+	}
 	closeLogFiles(logFiles)
 
 	if err != nil {

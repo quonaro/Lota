@@ -660,6 +660,39 @@ func TestPrefixWriter_WithANSIColorPrefix(t *testing.T) {
 	}
 }
 
+func TestExecuteCommandWithPrefix_PreservesTTY(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe error: %v", err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+
+	cmd := &config.Command{
+		Name:   "test",
+		Script: "if test -t 1; then echo 'is-tty'; else echo 'no-tty'; fi",
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	runErr := ExecuteCommandWithPrefix(context.Background(), cmd, ctx, RunOptions{}, "sh -c", "", "[prefix]")
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, r); err != nil {
+		t.Fatalf("read output error: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "is-tty") {
+		t.Errorf("expected TTY to be preserved with PrefixWriter, got: %q", text)
+	}
+}
+
 func TestResolveDir_Unit(t *testing.T) {
 	tests := []struct {
 		name       string

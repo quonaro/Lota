@@ -86,6 +86,33 @@ func TestInterpolate(t *testing.T) {
 			expected: "echo production",
 		},
 		{
+			name:   "simple variable replacement with $ syntax",
+			script: "echo $ENV_VAR",
+			context: InterpolationContext{
+				Vars: map[string]string{"ENV_VAR": "production"},
+				Args: map[string]string{},
+			},
+			expected: "echo production",
+		},
+		{
+			name:   "nested variable with $ syntax",
+			script: "echo $cfg.app_name",
+			context: InterpolationContext{
+				Vars: map[string]string{"cfg.app_name": "MyApp"},
+				Args: map[string]string{},
+			},
+			expected: "echo MyApp",
+		},
+		{
+			name:   "mixed $ and {{ syntax",
+			script: "echo $ENV_VAR and {{OTHER_VAR}}",
+			context: InterpolationContext{
+				Vars: map[string]string{"ENV_VAR": "prod", "OTHER_VAR": "test"},
+				Args: map[string]string{},
+			},
+			expected: "echo prod and test",
+		},
+		{
 			name:   "simple argument replacement",
 			script: "echo {{param1}}",
 			context: InterpolationContext{
@@ -221,5 +248,31 @@ func TestInterpolate_DeprecationWarning(t *testing.T) {
 
 	if !strings.Contains(output, "warning: {{port}} interpolation is deprecated") {
 		t.Errorf("expected deprecation warning, got: %q", output)
+	}
+}
+
+func TestInterpolate_DeprecationWarning_Var(t *testing.T) {
+	// Reset package-level warned map so the test is deterministic.
+	deprecationWarned = make(map[string]bool)
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	ctx := InterpolationContext{
+		Vars: map[string]string{"ENV_VAR": "production"},
+		Args: map[string]string{},
+	}
+	_, _ = Interpolate("echo {{ENV_VAR}}", ctx)
+
+	_ = w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	if !strings.Contains(output, "warning: {{ENV_VAR}} interpolation is deprecated") {
+		t.Errorf("expected deprecation warning for var, got: %q", output)
 	}
 }

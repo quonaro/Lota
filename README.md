@@ -474,7 +474,9 @@ deploy:
     script: ./deploy.sh --env="$env"
 ```
 
-> **Deprecation:** Using `{{name}}` for argument interpolation is deprecated. Use `$name` instead. `{{name}}` will be removed in a future version.
+> **Deprecation:** Using `{{name}}` for variable and argument interpolation is deprecated. Use `$name` instead. `{{name}}` will be removed in a future version.
+
+> **Reserved Variables:** System environment variable names (PATH, HOME, USER, SHELL, etc.) are reserved and cannot be overridden in `vars`.
 
 ### 🐚 Shell Configuration
 

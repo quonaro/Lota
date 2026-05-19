@@ -14,6 +14,27 @@ var validColors = map[string]struct{}{
 	"hiblack": {}, "hired": {}, "higreen": {}, "hiyellow": {}, "hiblue": {}, "himagenta": {}, "hicyan": {}, "hiwhite": {},
 }
 
+var reservedSystemVars = map[string]bool{
+	"PATH":       true,
+	"HOME":       true,
+	"USER":       true,
+	"SHELL":      true,
+	"LANG":       true,
+	"LC_ALL":     true,
+	"TERM":       true,
+	"PWD":        true,
+	"OLDPWD":     true,
+	"HOSTNAME":   true,
+	"LOGNAME":    true,
+	"MAIL":       true,
+	"TMPDIR":     true,
+	"DISPLAY":    true,
+	"XAUTHORITY": true,
+	"EDITOR":     true,
+	"VISUAL":     true,
+	"PAGER":      true,
+}
+
 func isValidColor(c string) bool {
 	if c == "" {
 		return true
@@ -306,6 +327,11 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 		v.Name, v.Value = parts[0], parts[1]
 	} else {
 		v.Name, v.Value = parts[0], ""
+	}
+
+	// Validate against reserved system variable names
+	if reservedSystemVars[v.Name] {
+		return fmt.Errorf("variable name %q is reserved for system use and cannot be overridden", v.Name)
 	}
 
 	return nil

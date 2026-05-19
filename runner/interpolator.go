@@ -11,6 +11,7 @@ import (
 )
 
 var placeholderRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+var dollarVarRegex = regexp.MustCompile(`\$([a-zA-Z_][a-zA-Z0-9_.]*)`)
 
 // deprecationWarned tracks which {{}} placeholders have already emitted a warning.
 // Safe without synchronization because Lota executes commands sequentially.
@@ -59,6 +60,25 @@ func findSimilarVars(placeholder string, vars map[string]string) []string {
 func Interpolate(script string, context InterpolationContext) (string, error) {
 	result := script
 
+	// Process $var syntax first
+	dollarVars := findDollarVars(script)
+	for _, varName := range dollarVars {
+		// Skip special variables like $CWD
+		if isSpecialVariable(varName) {
+			continue
+		}
+		value, err := interpolatePlaceholder(varName, context)
+		if err != nil {
+			similar := findSimilarVars(varName, context.Vars)
+			if len(similar) > 0 {
+				return "", fmt.Errorf("%s not found. Available vars with '%s': %s. Check --help for more information", varName, varName, strings.Join(similar, ", "))
+			}
+			return "", fmt.Errorf("%s is required. Check --help for more information", varName)
+		}
+		result = strings.ReplaceAll(result, "$"+varName, value)
+	}
+
+	// Process {{}} syntax (deprecated for vars)
 	placeholders := findPlaceholders(script)
 
 	// Collect all validation errors
@@ -74,7 +94,13 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 			}
 			continue
 		}
+		// Show deprecation warning for {{}} syntax
 		if _, isArg := context.Args[placeholder]; isArg {
+			if !deprecationWarned[placeholder] {
+				fmt.Fprintf(os.Stderr, "\033[33mwarning: {{%s}} interpolation is deprecated, use $%s instead\033[0m\n", placeholder, placeholder)
+				deprecationWarned[placeholder] = true
+			}
+		} else if _, isVar := context.Vars[placeholder]; isVar {
 			if !deprecationWarned[placeholder] {
 				fmt.Fprintf(os.Stderr, "\033[33mwarning: {{%s}} interpolation is deprecated, use $%s instead\033[0m\n", placeholder, placeholder)
 				deprecationWarned[placeholder] = true
@@ -105,13 +131,33 @@ func findPlaceholders(script string) []string {
 	return placeholders
 }
 
-// interpolatePlaceholder interpolates a single placeholder.
-// vars have higher priority than args: same name in both — var wins.
-func interpolatePlaceholder(placeholder string, context InterpolationContext) (string, error) {
-	if value, exists := context.Vars[placeholder]; exists {
-		return value, nil
-	}
+// findDollarVars extracts all unique $var patterns from script
+func findDollarVars(script string) []string {
+	matches := dollarVarRegex.FindAllStringSubmatch(script, -1)
 
+	seen := make(map[string]bool)
+	vars := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 && !seen[match[1]] {
+			seen[match[1]] = true
+			vars = append(vars, match[1])
+		}
+	}
+	return vars
+}
+
+// isSpecialVariable checks if a variable name is a special system variable
+func isSpecialVariable(name string) bool {
+	specialVars := map[string]bool{
+		"CWD": true,
+	}
+	return specialVars[name]
+}
+
+// interpolatePlaceholder interpolates a single placeholder.
+// args have higher priority than vars: same name in both — arg wins.
+func interpolatePlaceholder(placeholder string, context InterpolationContext) (string, error) {
+	// Check args first (higher priority)
 	if value, exists := context.Args[placeholder]; exists {
 		var argDef *config.Arg
 		for _, def := range context.ArgDefs {
@@ -125,6 +171,11 @@ func interpolatePlaceholder(placeholder string, context InterpolationContext) (s
 			return interpolateTypedValue(placeholder, value, *argDef)
 		}
 
+		return value, nil
+	}
+
+	// Then check vars
+	if value, exists := context.Vars[placeholder]; exists {
 		return value, nil
 	}
 

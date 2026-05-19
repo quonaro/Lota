@@ -221,6 +221,39 @@ func TestVar_UnmarshalYAML_Import(t *testing.T) {
 				Prefix:   "",
 			},
 		},
+		{
+			name:  "new format import env without prefix",
+			tag:   "import:env",
+			value: ".env",
+			expected: Var{
+				IsFile:   true,
+				Format:   "env",
+				FromFile: ".env",
+				Prefix:   "",
+			},
+		},
+		{
+			name:  "new format import yaml with prefix",
+			tag:   "import:yaml",
+			value: "env.yaml public",
+			expected: Var{
+				IsFile:   true,
+				Format:   "yaml",
+				FromFile: "env.yaml",
+				Prefix:   "public",
+			},
+		},
+		{
+			name:  "new format import yml with prefix",
+			tag:   "import:yml",
+			value: "config.yml app",
+			expected: Var{
+				IsFile:   true,
+				Format:   "yml",
+				FromFile: "config.yml",
+				Prefix:   "app",
+			},
+		},
 	}
 
 	for _, tt := range tests {

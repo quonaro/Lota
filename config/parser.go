@@ -303,10 +303,19 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 	tag := node.Tag
 	value := node.Value
 
-	// Format: !import:format <path> [prefix]
-	if strings.HasPrefix(tag, "!import:") {
+	// Format: import:format <path> [prefix] (new)
+	// Format: !import:format <path> [prefix] (deprecated)
+	isImport := strings.HasPrefix(tag, "import:")
+	isDeprecated := strings.HasPrefix(tag, "!import:")
+
+	if isImport || isDeprecated {
 		v.IsFile = true
-		v.Format = strings.TrimPrefix(tag, "!import:")
+		if isDeprecated {
+			v.Format = strings.TrimPrefix(tag, "!import:")
+			fmt.Fprintf(os.Stderr, "\033[33mwarning: !import: syntax is deprecated, use import: instead\033[0m\n")
+		} else {
+			v.Format = strings.TrimPrefix(tag, "import:")
+		}
 
 		// Parse: path [prefix]
 		fields := strings.Fields(strings.TrimSpace(value))

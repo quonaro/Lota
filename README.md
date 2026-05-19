@@ -89,7 +89,7 @@ lota dev test
 shell: bash
 
 vars:
-  - !import:env .env
+  - import:env .env
   - NODE_ENV=development
 
 args:
@@ -236,9 +236,9 @@ release:
 shell: bash
 
 vars:
-  - !import:env .env.local
-  - !import:env .env.shared
-  - !import:yaml config/secrets.yaml@public app  # Import public config section
+  - import:env .env.local
+  - import:env .env.shared
+  - import:yaml config/secrets.yaml@public app  # Import public config section
 
 args:
   - environment|env:str=dev
@@ -289,7 +289,7 @@ shell: bash  # Optional: default shell (auto-detected if omitted)
 
 vars:           # global environment variables
   - KEY=value
-  - !import:env .env  # Import from .env file
+  - import:env .env  # Import from .env file
 
 args:           # global argument definitions
   - name:type=default
@@ -337,8 +337,8 @@ Load variables from environment files:
 
 ```yaml
 vars:
-  - !import:env .env
-  - !import:env config/prod.env
+  - import:env .env
+  - import:env config/prod.env
 ```
 
 #### 📊 Import from YAML files
@@ -347,13 +347,15 @@ Import nested YAML configurations with automatic flattening to dot-notation:
 
 ```yaml
 vars:
-  - !import:yaml config.yaml          # Import all with original keys
-  - !import:yaml config.yaml app     # Import all with 'app.' prefix
-  - !import:yaml config.yaml@public   # Import only 'public' section
-  - !import:yaml secrets.yaml@db cfg # Import 'db' section with 'cfg.' prefix
+  - import:yaml config.yaml          # Import all with original keys
+  - import:yaml config.yaml app     # Import all with 'app.' prefix
+  - import:yaml config.yaml@public   # Import only 'public' section
+  - import:yaml secrets.yaml@db cfg # Import 'db' section with 'cfg.' prefix
 ```
 
-**Syntax:** `!import:yaml <file>[@<section>] [<prefix>]`
+**Syntax:** `import:yaml <file>[@<section>] [<prefix>]`
+
+> **Note:** The old `!import:yaml` syntax is deprecated but still supported. Use `import:yaml` instead.
 
 - **file** - Path to YAML file
 - **section** (optional) - Import only specific top-level section via `@section`
@@ -375,7 +377,7 @@ private:
 
 **Resulting variables:**
 ```yaml
-# !import:yaml config.yaml@public app
+# import:yaml config.yaml@public app
 vars:
   app.app_name: "MyApp"
   app.version: "1.0.0"

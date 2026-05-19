@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"lota/shared"
 	"os"
 	"path/filepath"
@@ -229,5 +230,30 @@ func TestGetConfigPath_YamlExtension(t *testing.T) {
 	}
 	if config.Path != yamlPath {
 		t.Errorf("GetConfigPath() = %v, want %v", config.Path, yamlPath)
+	}
+}
+
+func TestErrConfigNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Ensure no config file exists
+	_, err := findConfigFile(tempDir)
+	if err == nil {
+		t.Fatal("findConfigFile() should fail when no config file exists")
+	}
+
+	// Check that the error is ErrConfigNotFound
+	if !errors.Is(err, ErrConfigNotFound) {
+		t.Errorf("expected error to wrap ErrConfigNotFound, got: %v", err)
+	}
+
+	// Also test GetConfigPath
+	_, err = GetConfigPath(tempDir)
+	if err == nil {
+		t.Fatal("GetConfigPath() should fail when no config file exists")
+	}
+
+	if !errors.Is(err, ErrConfigNotFound) {
+		t.Errorf("expected error to wrap ErrConfigNotFound, got: %v", err)
 	}
 }

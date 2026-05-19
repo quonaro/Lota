@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"lota/config"
 	"lota/runner"
@@ -133,10 +134,17 @@ func printGlobalOptions() {
 func PrintHelp(configPath string) {
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
-		fmt.Println("No lota.yml found in current directory or parent directories.")
-		fmt.Println("Run `lota --init` to create a default configuration.")
-		fmt.Println()
-		printGlobalOptions()
+		if errors.Is(err, config.ErrConfigNotFound) {
+			fmt.Println("No lota.yml found in current directory or parent directories.")
+			fmt.Println("Run `lota --init` to create a default configuration.")
+			fmt.Println()
+			printGlobalOptions()
+		} else {
+			// Show the actual error (parsing, validation, etc.)
+			color.Red("Error: %v\n", err)
+			fmt.Println()
+			printGlobalOptions()
+		}
 		return
 	}
 

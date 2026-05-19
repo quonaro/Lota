@@ -1,12 +1,16 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"lota/shared"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// ErrConfigNotFound is returned when no config file is found in the directory tree
+var ErrConfigNotFound = errors.New("no config file found")
 
 type FileConfig struct {
 	Path string
@@ -58,7 +62,7 @@ func findConfigFile(dir string) (string, error) {
 		dir = parent
 	}
 
-	return "", fmt.Errorf("no config file found (checked: %s)", strings.Join(checked, ", "))
+	return "", fmt.Errorf("%w (checked: %s)", ErrConfigNotFound, strings.Join(checked, ", "))
 }
 
 func GetConfigPath(path string) (*FileConfig, error) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"lota/config"
 	"lota/runner"
+	"path/filepath"
 	"strings"
 
 	"github.com/fatih/color"
@@ -122,7 +123,7 @@ func LoadConfig(configPath string) (*config.AppConfig, error) {
 
 	cfg, err := config.ParseConfig(fc.Path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s:%w", filepath.Base(fc.Path), err)
 	}
 
 	// Validates the configuration (includes ExpandAllVars and BuildIndexes)

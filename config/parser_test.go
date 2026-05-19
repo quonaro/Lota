@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -674,5 +675,32 @@ top-level-command:
 
 	if command.Args[0].Name != "local_param" {
 		t.Errorf("Expected local_param arg, got %s", command.Args[0].Name)
+	}
+}
+
+func TestParseConfig_UnknownFieldWithSuggestion(t *testing.T) {
+	yamlContent := `dev:
+  desc: Development commands
+  interheit_color: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	_, err := ParseConfig(tmpFile)
+	if err == nil {
+		t.Fatal("Expected error for unknown field")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "unknown field") {
+		t.Errorf("Expected 'unknown field' in error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "Did you mean") {
+		t.Errorf("Expected 'Did you mean' suggestion in error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "inherit_color") {
+		t.Errorf("Expected suggestion 'inherit_color', got: %s", msg)
 	}
 }

@@ -43,6 +43,23 @@ func isValidColor(c string) bool {
 	return ok
 }
 
+func nodeKindName(kind yaml.Kind) string {
+	switch kind {
+	case yaml.MappingNode:
+		return "mapping"
+	case yaml.SequenceNode:
+		return "sequence"
+	case yaml.ScalarNode:
+		return "scalar"
+	case yaml.DocumentNode:
+		return "document"
+	case yaml.AliasNode:
+		return "alias"
+	default:
+		return fmt.Sprintf("node(%d)", kind)
+	}
+}
+
 // hasField checks if a mapping node has a key with the given name
 func hasField(node *yaml.Node, field string) bool {
 	if node.Kind != yaml.MappingNode {
@@ -54,6 +71,75 @@ func hasField(node *yaml.Node, field string) bool {
 		}
 	}
 	return false
+}
+
+var groupFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "shell"}
+var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "depends", "shell"}
+
+func suggestField(unknown string, valid []string) string {
+	best := ""
+	bestScore := 9999
+	for _, v := range valid {
+		dist := levenshteinDistance(unknown, v)
+		if dist < bestScore {
+			bestScore = dist
+			best = v
+		}
+	}
+	maxLen := max(len(unknown), len(best))
+	if maxLen == 0 {
+		return ""
+	}
+	normalized := float64(bestScore) / float64(maxLen)
+	if normalized <= 0.5 {
+		return best
+	}
+	return ""
+}
+
+func levenshteinDistance(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	prev := make([]int, len(b)+1)
+	curr := make([]int, len(b)+1)
+	for j := 0; j <= len(b); j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			insertion := curr[j-1] + 1
+			deletion := prev[j] + 1
+			substitution := prev[j-1] + cost
+			curr[j] = minInt(insertion, deletion, substitution)
+		}
+		prev, curr = curr, prev
+	}
+
+	return prev[len(b)]
+}
+
+func minInt(a, b, c int) int {
+	if a <= b && a <= c {
+		return a
+	}
+	if b <= c {
+		return b
+	}
+	return c
 }
 
 func ParseConfig(path string) (*AppConfig, error) {
@@ -74,7 +160,7 @@ func ParseConfig(path string) (*AppConfig, error) {
 	}
 
 	if root.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("expected mapping node, got %d", root.Kind)
+		return nil, fmt.Errorf("%d: expected mapping node, got %s", root.Line, nodeKindName(root.Kind))
 	}
 
 	config := &AppConfig{
@@ -107,17 +193,17 @@ func ParseConfig(path string) (*AppConfig, error) {
 			// Distinguish command (has "script" field) from group
 			if hasField(valueNode, "script") {
 				var cmd Command
+				cmd.Name = key
 				if err := valueNode.Decode(&cmd); err != nil {
 					return nil, err
 				}
-				cmd.Name = key
 				config.Commands = append(config.Commands, cmd)
 			} else {
 				var group Group
+				group.Name = key
 				if err := valueNode.Decode(&group); err != nil {
 					return nil, err
 				}
-				group.Name = key
 				config.Groups = append(config.Groups, group)
 			}
 		}
@@ -128,7 +214,7 @@ func ParseConfig(path string) (*AppConfig, error) {
 
 func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("expected mapping node for group, got %d", node.Kind)
+		return fmt.Errorf("%d: expected mapping node for group, got %s", node.Line, nodeKindName(node.Kind))
 	}
 
 	g.Commands = make([]Command, 0)
@@ -145,40 +231,48 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 		case "color":
 			g.Color = valueNode.Value
 			if !isValidColor(g.Color) {
-				return fmt.Errorf("invalid color %q for group %q", g.Color, g.Name)
+				return fmt.Errorf("%d: invalid color %q for group %q", valueNode.Line, g.Color, g.Name)
 			}
 		case "inherit_color":
 			var inherit bool
 			if err := valueNode.Decode(&inherit); err != nil {
-				return fmt.Errorf("invalid inherit_color for group %q: %w", g.Name, err)
+				return fmt.Errorf("%d: invalid inherit_color for group %q: %w", valueNode.Line, g.Name, err)
 			}
 			g.InheritColor = &inherit
 		case "vars":
 			if err := valueNode.Decode(&g.Vars); err != nil {
-				return err
+				return fmt.Errorf("%d: error parsing vars in group %q: %w", valueNode.Line, g.Name, err)
 			}
 		case "args":
 			if err := valueNode.Decode(&g.RawArgs); err != nil {
-				return err
+				return fmt.Errorf("%d: error parsing args in group %q: %w", valueNode.Line, g.Name, err)
 			}
 			g.Args = make([]Arg, len(g.RawArgs))
 			for j, arg := range g.RawArgs {
 				if err := g.Args[j].Parse(arg); err != nil {
-					return err
+					return fmt.Errorf("%d: invalid arg %q in group %q: %w", valueNode.Line, arg, g.Name, err)
 				}
 			}
 		default:
 			if hasField(valueNode, "script") {
 				var cmd Command
 				if err := valueNode.Decode(&cmd); err != nil {
-					return err
+					return fmt.Errorf("%d: error parsing command %q in group %q: %w", node.Content[i].Line, key, g.Name, err)
 				}
 				cmd.Name = key
 				g.Commands = append(g.Commands, cmd)
 			} else {
+				if valueNode.Kind != yaml.MappingNode {
+					suggestion := suggestField(key, groupFields)
+					if suggestion != "" {
+						return fmt.Errorf("%d: unknown field %q in group %q\nDid you mean: %s?", node.Content[i].Line, key, g.Name, suggestion)
+					}
+					return fmt.Errorf("%d: unknown field %q in group %q (expected mapping for nested group, got %s)",
+						node.Content[i].Line, key, g.Name, nodeKindName(valueNode.Kind))
+				}
 				var sub Group
 				if err := valueNode.Decode(&sub); err != nil {
-					return err
+					return fmt.Errorf("%d: error parsing nested group %q in group %q: %w", node.Content[i].Line, key, g.Name, err)
 				}
 				sub.Name = key
 				g.Groups = append(g.Groups, sub)
@@ -191,51 +285,58 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 
 func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("expected mapping node for command, got %d", node.Kind)
+		return fmt.Errorf("%d: expected mapping node for command, got %s", node.Line, nodeKindName(node.Kind))
 	}
 
 	for i := 0; i < len(node.Content); i += 2 {
 		key := node.Content[i].Value
+		valueNode := node.Content[i+1]
 		switch key {
 		case "desc":
-			c.Desc = node.Content[i+1].Value
+			c.Desc = valueNode.Value
 		case "dir":
-			c.Dir = node.Content[i+1].Value
+			c.Dir = valueNode.Value
 		case "color":
-			c.Color = node.Content[i+1].Value
+			c.Color = valueNode.Value
 			if !isValidColor(c.Color) {
-				return fmt.Errorf("invalid color %q for command %q", c.Color, c.Name)
+				return fmt.Errorf("%d: invalid color %q for command %q", valueNode.Line, c.Color, c.Name)
 			}
 		case "inherit_color":
 			var inherit bool
-			if err := node.Content[i+1].Decode(&inherit); err != nil {
-				return fmt.Errorf("invalid inherit_color for command %q: %w", c.Name, err)
+			if err := valueNode.Decode(&inherit); err != nil {
+				return fmt.Errorf("%d: invalid inherit_color for command %q: %w", valueNode.Line, c.Name, err)
 			}
 			c.InheritColor = &inherit
 		case "vars":
-			if err := node.Content[i+1].Decode(&c.Vars); err != nil {
-				return err
+			if err := valueNode.Decode(&c.Vars); err != nil {
+				return fmt.Errorf("%d: error parsing vars in command %q: %w", valueNode.Line, c.Name, err)
 			}
 		case "args":
-			if err := node.Content[i+1].Decode(&c.RawArgs); err != nil {
-				return err
+			if err := valueNode.Decode(&c.RawArgs); err != nil {
+				return fmt.Errorf("%d: error parsing args in command %q: %w", valueNode.Line, c.Name, err)
 			}
 			c.Args = make([]Arg, len(c.RawArgs))
 			for j, arg := range c.RawArgs {
 				if err := c.Args[j].Parse(arg); err != nil {
-					return err
+					return fmt.Errorf("%d: invalid arg %q in command %q: %w", valueNode.Line, arg, c.Name, err)
 				}
 			}
 		case "script":
-			c.Script = node.Content[i+1].Value
+			c.Script = valueNode.Value
 		case "before":
-			c.Before = node.Content[i+1].Value
+			c.Before = valueNode.Value
 		case "after":
-			c.After = node.Content[i+1].Value
+			c.After = valueNode.Value
 		case "depends":
-			if err := node.Content[i+1].Decode(&c.Depends); err != nil {
-				return err
+			if err := valueNode.Decode(&c.Depends); err != nil {
+				return fmt.Errorf("%d: error parsing depends in command %q: %w", valueNode.Line, c.Name, err)
 			}
+		default:
+			suggestion := suggestField(key, commandFields)
+			if suggestion != "" {
+				return fmt.Errorf("%d: unknown field %q in command %q\nDid you mean: %s?", node.Content[i].Line, key, c.Name, suggestion)
+			}
+			return fmt.Errorf("%d: unknown field %q in command %q", node.Content[i].Line, key, c.Name)
 		}
 	}
 
@@ -290,14 +391,14 @@ func (a *Arg) Parse(s string) error {
 
 func (a *Arg) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.ScalarNode {
-		return fmt.Errorf("expected scalar node for arg, got %d", node.Kind)
+		return fmt.Errorf("line %d: expected scalar node for arg, got %s", node.Line, nodeKindName(node.Kind))
 	}
 	return a.Parse(node.Value)
 }
 
 func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.ScalarNode {
-		return fmt.Errorf("expected scalar node for var, got %d", node.Kind)
+		return fmt.Errorf("line %d: expected scalar node for var, got %s", node.Line, nodeKindName(node.Kind))
 	}
 	v.IsFile = false
 	tag := node.Tag
@@ -320,7 +421,7 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 		// Parse: path [prefix]
 		fields := strings.Fields(strings.TrimSpace(value))
 		if len(fields) == 0 {
-			return fmt.Errorf("import requires a file path")
+			return fmt.Errorf("line %d: import requires a file path", node.Line)
 		}
 
 		v.FromFile = fields[0]
@@ -340,7 +441,7 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 
 	// Validate against reserved system variable names
 	if reservedSystemVars[v.Name] {
-		return fmt.Errorf("variable name %q is reserved for system use and cannot be overridden", v.Name)
+		return fmt.Errorf("line %d: variable name %q is reserved for system use and cannot be overridden", node.Line, v.Name)
 	}
 
 	return nil

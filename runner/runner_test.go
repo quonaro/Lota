@@ -348,3 +348,90 @@ func TestExecuteCommand_ExitCodePropagation(t *testing.T) {
 		t.Errorf("expected command summary to contain script fragment, got %q", shellErr.Command)
 	}
 }
+
+func TestExecuteCommand_DefaultsToConfigDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	marker := filepath.Join(tmpDir, "marker")
+
+	cmd := &config.Command{
+		Name:   "test",
+		Script: fmt.Sprintf("touch %s", "marker"),
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{ConfigDir: tmpDir}, "sh -c", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("expected marker to be created in ConfigDir: %v", err)
+	}
+}
+
+func TestExecuteCommand_CWD(t *testing.T) {
+	cwdDir := t.TempDir()
+	marker := filepath.Join(cwdDir, "marker")
+
+	cmd := &config.Command{
+		Name:   "test",
+		Dir:    "$CWD",
+		Script: fmt.Sprintf("touch %s", "marker"),
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{ConfigDir: "/nonexistent", WorkingDir: cwdDir}, "sh -c", "$CWD"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("expected marker to be created in CWD: %v", err)
+	}
+}
+
+func TestExecuteCommand_CWDSubdir(t *testing.T) {
+	cwdDir := t.TempDir()
+	subDir := filepath.Join(cwdDir, "sub")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+	marker := filepath.Join(subDir, "marker")
+
+	cmd := &config.Command{
+		Name:   "test",
+		Dir:    "$CWD/sub",
+		Script: fmt.Sprintf("touch %s", "marker"),
+	}
+	ctx := InterpolationContext{Vars: map[string]string{}, Args: map[string]string{}}
+
+	if err := ExecuteCommand(context.Background(), cmd, ctx, RunOptions{ConfigDir: "/nonexistent", WorkingDir: cwdDir}, "sh -c", "$CWD/sub"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("expected marker to be created in CWD/sub: %v", err)
+	}
+}
+
+func TestResolveDir_Unit(t *testing.T) {
+	tests := []struct {
+		name       string
+		baseDir    string
+		workingDir string
+		dir        string
+		expected   string
+	}{
+		{"empty defaults to baseDir", "/config", "/cwd", "", "/config"},
+		{"$CWD", "/config", "/cwd", "$CWD", "/cwd"},
+		{"$CWD/sub", "/config", "/cwd", "$CWD/sub", filepath.Join("/cwd", "sub")},
+		{"relative to baseDir", "/config", "/cwd", "backend", filepath.Join("/config", "backend")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveDir(tt.baseDir, tt.workingDir, tt.dir)
+			if result != tt.expected {
+				t.Errorf("resolveDir() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

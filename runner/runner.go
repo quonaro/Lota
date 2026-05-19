@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -173,7 +172,7 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 	cmd := exec.Command(parts[0], append(parts[1:], script)...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = resolveDir(baseDir, workingDir, dir)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setupSysProcAttr(cmd)
 
 	// Resolve log paths and open files
 	var logFiles []*os.File
@@ -258,7 +257,7 @@ func gracefulWait(cmd *exec.Cmd, ctx context.Context) error {
 			fmt.Fprintf(os.Stderr, "\r\033[KReceived signal, shutting down gracefully...\n")
 		})
 		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			_ = terminateProcess(cmd.Process.Pid)
 		}
 
 		select {
@@ -267,7 +266,7 @@ func gracefulWait(cmd *exec.Cmd, ctx context.Context) error {
 		case <-time.After(10 * time.Second):
 			fmt.Fprintln(os.Stderr, "Grace period exceeded, force-killing process...")
 			if cmd.Process != nil {
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				_ = killProcess(cmd.Process.Pid)
 			}
 			return ctx.Err()
 		}

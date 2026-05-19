@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-const maxSuggestions = 3
+const (
+	maxSuggestions         = 3
+	maxSimilarityThreshold = 0.6 // Maximum allowed normalized Levenshtein distance (60%)
+)
 
 func commandNotFoundError(cfg *config.AppConfig, cliArgs []string) error {
 	query := strings.TrimSpace(strings.Join(cliArgs, " "))
@@ -57,14 +60,22 @@ func suggestCommandPaths(cfg *config.AppConfig, cliArgs []string) []string {
 		return scored[i].score < scored[j].score
 	})
 
+	// Filter out candidates with high scores (poor similarity)
+	filtered := make([]scoredPath, 0, len(scored))
+	for _, sp := range scored {
+		if sp.score < 9999 {
+			filtered = append(filtered, sp)
+		}
+	}
+
 	limit := maxSuggestions
-	if len(scored) < limit {
-		limit = len(scored)
+	if len(filtered) < limit {
+		limit = len(filtered)
 	}
 
 	result := make([]string, 0, limit)
 	for i := 0; i < limit; i++ {
-		result = append(result, scored[i].path)
+		result = append(result, filtered[i].path)
 	}
 	return result
 }
@@ -129,11 +140,28 @@ func suggestionScore(query, candidate string) int {
 	if strings.HasPrefix(normCandidate, query) {
 		return 1
 	}
-	if strings.Contains(normCandidate, query) {
+
+	// Only use Contains if the match is significant (at least 50% of query length)
+	if strings.Contains(normCandidate, query) && len(query) >= 3 {
 		return 2
 	}
 
-	return levenshteinDistance(strings.ReplaceAll(query, " ", ""), strings.ReplaceAll(normCandidate, " ", "")) + 3
+	// Use normalized Levenshtein distance to avoid suggesting completely different strings
+	queryCompact := strings.ReplaceAll(query, " ", "")
+	candidateCompact := strings.ReplaceAll(normCandidate, " ", "")
+
+	dist := levenshteinDistance(queryCompact, candidateCompact)
+	maxLen := max(len(queryCompact), len(candidateCompact))
+
+	// Normalize distance: 0.0 = identical, 1.0 = completely different
+	normalizedDist := float64(dist) / float64(maxLen)
+
+	// If similarity is too low, return a high score to filter it out
+	if normalizedDist > maxSimilarityThreshold {
+		return 9999
+	}
+
+	return dist + 3
 }
 
 func levenshteinDistance(a, b string) int {

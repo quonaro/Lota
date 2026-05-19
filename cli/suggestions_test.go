@@ -74,3 +74,35 @@ func TestCommandNotFoundError_IncludesSuggestions(t *testing.T) {
 		t.Fatalf("expected exactly 3 suggestions, got %q", msg)
 	}
 }
+
+func TestCommandNotFoundError_NoSuggestionsForUnsimilarQuery(t *testing.T) {
+	cfg := testSuggestionConfig(t)
+
+	// "clear" is very different from "build", "test", "dev", "run", "lint", "docker", "up"
+	err := commandNotFoundError(cfg, []string{"clear"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+
+	// Should NOT include suggestions for completely different words
+	if strings.Contains(msg, "Did you mean:") {
+		t.Fatalf("expected no suggestions for unsimilar query, got %q", msg)
+	}
+}
+
+func TestSuggestionScore_ClearVsBuild(t *testing.T) {
+	// Test that "clear" vs "build" gets a high score (filtered out)
+	score := suggestionScore("clear", "build")
+	if score < 9999 {
+		t.Fatalf("expected high score for dissimilar words, got %d", score)
+	}
+}
+
+func TestSuggestionScore_ClearVsDev(t *testing.T) {
+	// Test that "clear" vs "dev" gets a high score (filtered out)
+	score := suggestionScore("clear", "dev")
+	if score < 9999 {
+		t.Fatalf("expected high score for dissimilar words, got %d", score)
+	}
+}

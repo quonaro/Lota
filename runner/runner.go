@@ -14,10 +14,11 @@ import (
 
 // RunOptions controls execution behavior
 type RunOptions struct {
-	Verbose   bool
-	DryRun    bool
-	ConfigDir string        // base directory for resolving relative dir paths
-	Timeout   time.Duration // 0 means no timeout
+	Verbose    bool
+	DryRun     bool
+	ConfigDir  string        // base directory for resolving relative dir paths
+	WorkingDir string        // caller's current working directory
+	Timeout    time.Duration // 0 means no timeout
 }
 
 // ShellError represents a non-zero exit from a shell command.
@@ -30,8 +31,26 @@ func (e *ShellError) Error() string {
 	return fmt.Sprintf("command %s exited with code %d", e.Command, e.ExitCode)
 }
 
+// resolveDir determines the working directory for a command.
+// - empty dir        → ConfigDir
+// - $CWD             → WorkingDir
+// - $CWD/...         → WorkingDir + remainder
+// - anything else    → ConfigDir + dir
+func resolveDir(baseDir, workingDir, dir string) string {
+	if dir == "" {
+		return baseDir
+	}
+	if dir == "$CWD" {
+		return workingDir
+	}
+	if strings.HasPrefix(dir, "$CWD/") {
+		return filepath.Join(workingDir, strings.TrimPrefix(dir, "$CWD/"))
+	}
+	return filepath.Join(baseDir, dir)
+}
+
 // executeShell runs a script in shell with environment variables
-func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, dir string) error {
+func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string) error {
 	// Split shell command and flags (e.g., "bash -c" -> ["bash", "-c"])
 	parts := strings.Fields(shell)
 	if len(parts) == 0 {
@@ -41,9 +60,7 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if dir != "" {
-		cmd.Dir = filepath.Join(baseDir, dir)
-	}
+	cmd.Dir = resolveDir(baseDir, workingDir, dir)
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return &ShellError{
@@ -119,7 +136,7 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		if opts.DryRun {
 			fmt.Printf("[dry-run] before:\n%s\n", interpolatedBefore)
 		} else {
-			if err := executeShell(ctx, interpolatedBefore, env, shell, opts.ConfigDir, dir); err != nil {
+			if err := executeShell(ctx, interpolatedBefore, env, shell, opts.ConfigDir, opts.WorkingDir, dir); err != nil {
 				return fmt.Errorf("before hook failed: %w", err)
 			}
 		}
@@ -136,7 +153,7 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] script:\n%s\n", interpolatedScript)
-		} else if err := executeShell(ctx, interpolatedScript, env, shell, opts.ConfigDir, dir); err != nil {
+		} else if err := executeShell(ctx, interpolatedScript, env, shell, opts.ConfigDir, opts.WorkingDir, dir); err != nil {
 			scriptErr = err
 		}
 	}
@@ -152,7 +169,7 @@ func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx Interpol
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] after:\n%s\n", interpolatedAfter)
-		} else if err := executeShell(ctx, interpolatedAfter, env, shell, opts.ConfigDir, dir); err != nil {
+		} else if err := executeShell(ctx, interpolatedAfter, env, shell, opts.ConfigDir, opts.WorkingDir, dir); err != nil {
 			if scriptErr != nil {
 				fmt.Fprintf(os.Stderr, "after hook failed: %v\n", err)
 			} else {

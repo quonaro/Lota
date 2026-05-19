@@ -79,12 +79,38 @@ func PerformUpdate() error {
 		return fmt.Errorf("cannot make downloaded binary executable: %w", err)
 	}
 
-	if err := os.Rename(tempFile, realPath); err != nil {
+	tmpTarget := realPath + ".tmp"
+	if err := copyFile(tempFile, tmpTarget); err != nil {
+		_ = os.Remove(tmpTarget)
+		return fmt.Errorf("cannot copy new binary: %w", err)
+	}
+
+	if err := os.Rename(tmpTarget, realPath); err != nil {
+		_ = os.Remove(tmpTarget)
 		return fmt.Errorf("cannot replace current binary: %w", err)
 	}
 
 	color.Green("Successfully updated to %s!\n", latest.TagName)
 	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = out.Close() }()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 func fetchLatestRelease() (*release, error) {

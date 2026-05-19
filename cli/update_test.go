@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -56,6 +57,52 @@ func TestFetchLatestRelease(t *testing.T) {
 	// Replace the API URL in fetchLatestRelease by overriding repo constant isn't possible,
 	// so we test the helper logic through a public wrapper in tests only.
 	// Instead, we test normalizeVersion and downloadToTemp directly.
+}
+
+func TestCopyFile(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "src")
+	dst := filepath.Join(t.TempDir(), "dst")
+	content := []byte("binary data")
+
+	if err := os.WriteFile(src, content, 0644); err != nil {
+		t.Fatalf("failed to write source: %v", err)
+	}
+
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile failed: %v", err)
+	}
+
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("failed to read destination: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("copied content mismatch: got %q, want %q", got, content)
+	}
+
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("failed to stat destination: %v", err)
+	}
+	if info.Mode()&0111 == 0 {
+		t.Errorf("destination not executable: %v", info.Mode())
+	}
+
+	// Overwrite existing destination
+	newContent := []byte("updated data")
+	if err := os.WriteFile(src, newContent, 0644); err != nil {
+		t.Fatalf("failed to update source: %v", err)
+	}
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile overwrite failed: %v", err)
+	}
+	got, err = os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("failed to read destination after overwrite: %v", err)
+	}
+	if string(got) != string(newContent) {
+		t.Errorf("overwritten content mismatch: got %q, want %q", got, newContent)
+	}
 }
 
 func TestDownloadToTemp(t *testing.T) {

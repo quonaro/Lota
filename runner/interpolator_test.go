@@ -51,7 +51,6 @@ func TestFindSimilarVars(t *testing.T) {
 			expected: []string{"simple.other", "simple.value"},
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := findSimilarVars(tt.placeholder, tt.vars)
@@ -69,6 +68,7 @@ func TestFindSimilarVars(t *testing.T) {
 }
 
 func TestInterpolate(t *testing.T) {
+	t.Setenv("CUSTOM_ENV_TEST", "1")
 	tests := []struct {
 		name     string
 		script   string
@@ -211,6 +211,43 @@ func TestInterpolate(t *testing.T) {
 				},
 			},
 			expected: `echo "Invalid type: patch. Use: major, minor, patch, or auto"`,
+		},
+		{
+			name:   "local shell variable remains untouched",
+			script: "CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)\necho $CURRENT_BRANCH",
+			context: InterpolationContext{
+				Vars: map[string]string{},
+				Args: map[string]string{},
+			},
+			expected: "CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)\necho $CURRENT_BRANCH",
+		},
+		{
+			name:   "env variable remains untouched",
+			script: "echo $CUSTOM_ENV_TEST",
+			context: InterpolationContext{
+				Vars: map[string]string{},
+				Args: map[string]string{},
+			},
+			expected: "echo $CUSTOM_ENV_TEST",
+		},
+		{
+			name:   "unknown dollar var similar to config errors",
+			script: "echo $environmnt",
+			context: InterpolationContext{
+				Vars: map[string]string{"environment": "prod"},
+				Args: map[string]string{},
+			},
+			wantErr: true,
+		},
+		{
+			name:   "missing argument definition still errors",
+			script: "echo $param1",
+			context: InterpolationContext{
+				Vars:    map[string]string{},
+				Args:    map[string]string{},
+				ArgDefs: []config.Arg{{Name: "param1", Type: "str"}},
+			},
+			wantErr: true,
 		},
 	}
 

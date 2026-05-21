@@ -12,6 +12,9 @@ import (
 
 var placeholderRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 var dollarVarRegex = regexp.MustCompile(`\$([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)`)
+var assignmentRegex = regexp.MustCompile(`(?m)(^|[;&])\s*(?:export\s+|local\s+|declare\s+|typeset\s+|readonly\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\+?=)`)
+var loopVarRegex = regexp.MustCompile(`(?m)(^|[;{])\s*(?:for|select)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\b`)
+var readCommandRegex = regexp.MustCompile(`\bread(?:\s+-[^\s]+)*((?:\s+[a-zA-Z_][a-zA-Z0-9_]*)+)`)
 
 // ValidationError represents an interpolation validation error
 type ValidationError struct {
@@ -56,6 +59,8 @@ func findSimilarVars(placeholder string, vars map[string]string) []string {
 // Supports type-aware interpolation and validation.
 func Interpolate(script string, context InterpolationContext) (string, error) {
 	result := script
+	localVars := detectScriptLocalVars(script)
+	systemEnvVars := buildSystemEnvVarSet()
 
 	// Process $var syntax first
 	dollarVars := findDollarVars(script)
@@ -66,9 +71,15 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 		}
 		value, err := interpolatePlaceholder(varName, context)
 		if err != nil {
+			if localVars[varName] || systemEnvVars[varName] {
+				continue
+			}
 			similar := findSimilarVars(varName, context.Vars)
 			if len(similar) > 0 {
 				return "", fmt.Errorf("%s not found. Available vars with '%s': %s. Check --help for more information", varName, varName, strings.Join(similar, ", "))
+			}
+			if argDefined(varName, context.ArgDefs) {
+				return "", fmt.Errorf("%s is required. Check --help for more information", varName)
 			}
 			return "", fmt.Errorf("%s is required. Check --help for more information", varName)
 		}
@@ -155,6 +166,104 @@ func isSpecialVariable(name string) bool {
 		"CWD": true,
 	}
 	return specialVars[name]
+}
+
+// argDefined returns true if placeholder is a declared argument name
+func argDefined(name string, defs []config.Arg) bool {
+	for _, def := range defs {
+		if def.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// detectScriptLocalVars extracts shell variables that are defined within the script
+func detectScriptLocalVars(script string) map[string]bool {
+	locals := make(map[string]bool)
+	assignmentMatches := assignmentRegex.FindAllStringSubmatch(script, -1)
+	for _, match := range assignmentMatches {
+		if len(match) >= 3 {
+			locals[match[2]] = true
+		}
+	}
+
+	loopMatches := loopVarRegex.FindAllStringSubmatch(script, -1)
+	for _, match := range loopMatches {
+		if len(match) >= 3 {
+			locals[match[2]] = true
+		}
+	}
+
+	readMatches := readCommandRegex.FindAllStringSubmatch(script, -1)
+	for _, match := range readMatches {
+		if len(match) < 2 {
+			continue
+		}
+		fields := strings.Fields(match[1])
+		for _, field := range fields {
+			if name, ok := extractIdentifier(field); ok {
+				locals[name] = true
+			}
+		}
+	}
+
+	return locals
+}
+
+// buildSystemEnvVarSet collects current process environment variable names
+func buildSystemEnvVarSet() map[string]bool {
+	vars := make(map[string]bool)
+	for _, env := range os.Environ() {
+		if idx := strings.Index(env, "="); idx > 0 {
+			name := env[:idx]
+			if isValidShellIdentifier(name) {
+				vars[name] = true
+			}
+		}
+	}
+	return vars
+}
+
+func isValidShellIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		if !isShellIdentRune(r, i == 0) {
+			return false
+		}
+	}
+	return true
+}
+
+func extractIdentifier(token string) (string, bool) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", false
+	}
+	var builder strings.Builder
+	for i, r := range token {
+		if isShellIdentRune(r, i == 0) {
+			builder.WriteRune(r)
+			continue
+		}
+		if i == 0 {
+			return "", false
+		}
+		break
+	}
+	if builder.Len() == 0 {
+		return "", false
+	}
+	return builder.String(), true
+}
+
+func isShellIdentRune(r rune, first bool) bool {
+	if first {
+		return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_'
+	}
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
 }
 
 // interpolatePlaceholder interpolates a single placeholder.

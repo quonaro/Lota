@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // FindCommandByPath finds a command by its full dot-separated path (e.g., "infra.docker.up").
@@ -301,6 +302,10 @@ func resolveDependencyLevels(cfg *config.AppConfig, result config.SearchResult) 
 }
 
 // RunCommand executes a command with CLI arguments, including dependencies.
+// When the target command has parallel=true (default), all dependencies run
+// in the background concurrently. Levels proceed sequentially for startup
+// order, but no command blocks another. After the target command finishes,
+// RunCommand waits for all background dependencies (e.g. dev servers).
 func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, cliArgs []string, opts runner.RunOptions) error {
 	if result.Command == nil {
 		return fmt.Errorf("not a command")
@@ -314,22 +319,63 @@ func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	// Determine execution mode from target command
 	parallel := result.Command.Parallel == nil || *result.Command.Parallel
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var allWg sync.WaitGroup
+	var firstErr atomic.Pointer[error]
+
 	for _, level := range levels {
+		if f := firstErr.Load(); f != nil {
+			return *f
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if parallel && len(level) > 1 {
-			if err := runLevelParallel(ctx, cfg, level, opts); err != nil {
-				return err
+
+		if parallel {
+			// Parallel mode: spawn all dependencies in the background.
+			// Levels proceed sequentially for startup order, but no command
+			// blocks another.
+			for _, dep := range level {
+				dep := dep
+				path := commandPath(dep.Command, dep.Groups)
+				colorName := resolveColor(dep.Command.Color, dep.Command.InheritColor, dep.Groups)
+				if colorName == "" {
+					colorName = hashColor(path)
+				}
+				prefix := colorize(fmt.Sprintf("[%s]", path), colorName)
+
+				allWg.Add(1)
+				go func(d config.SearchResult, p string) {
+					defer allWg.Done()
+					if err := executeSingleCommand(ctx, cfg, d, opts, p); err != nil {
+						if ctx.Err() == context.Canceled {
+							return
+						}
+						wrapped := fmt.Errorf("dependency %s failed: %w", p, err)
+						firstErr.CompareAndSwap(nil, &wrapped)
+						cancel()
+					}
+				}(dep, prefix)
 			}
 		} else {
+			// Sequential mode: run each dependency and wait for completion
 			for _, dep := range level {
-				fmt.Printf("=> Running dependency: %s\n", commandPath(dep.Command, dep.Groups))
+				path := commandPath(dep.Command, dep.Groups)
+				fmt.Printf("=> Running dependency: %s\n", path)
 				if err := executeSingleCommand(ctx, cfg, dep, opts, ""); err != nil {
 					return fmt.Errorf("dependency failed: %w", err)
 				}
 			}
 		}
+	}
+
+	if f := firstErr.Load(); f != nil {
+		return *f
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	args := runner.ResolveArgs(*cfg, result.Groups, *result.Command)
@@ -350,59 +396,20 @@ func RunCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	}
 
 	logs := runner.ResolveLogs(*cfg, result.Groups, *result.Command)
-	opts.Logs = logs
+	mainOpts := opts
+	mainOpts.Logs = logs
 
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
-	if err := ctx.Err(); err != nil {
+	if err := runner.ExecuteCommand(ctx, result.Command, context, mainOpts, shell, dir); err != nil {
 		return err
 	}
-	return runner.ExecuteCommand(ctx, result.Command, context, opts, shell, dir)
-}
 
-// runLevelParallel executes a wave of dependencies in parallel with fail-fast.
-func runLevelParallel(ctx context.Context, cfg *config.AppConfig, level []config.SearchResult, opts runner.RunOptions) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// Wait for any background long-running dependencies (e.g. dev servers)
+	allWg.Wait()
 
-	type depErr struct {
-		path string
-		err  error
+	if f := firstErr.Load(); f != nil {
+		return *f
 	}
-
-	var wg sync.WaitGroup
-	errCh := make(chan depErr, len(level))
-
-	for _, dep := range level {
-		wg.Add(1)
-		go func(dep config.SearchResult) {
-			defer wg.Done()
-			path := commandPath(dep.Command, dep.Groups)
-			colorName := resolveColor(dep.Command.Color, dep.Command.InheritColor, dep.Groups)
-			if colorName == "" {
-				colorName = hashColor(path)
-			}
-			prefix := colorize(fmt.Sprintf("[%s]", path), colorName)
-			if err := executeSingleCommand(ctx, cfg, dep, opts, prefix); err != nil {
-				if ctx.Err() == context.Canceled {
-					return // cancelled by another failure
-				}
-				errCh <- depErr{path: path, err: err}
-				cancel()
-			}
-		}(dep)
-	}
-
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	var firstErr error
-	for de := range errCh {
-		if firstErr == nil {
-			firstErr = fmt.Errorf("dependency %s failed: %w", de.path, de.err)
-		}
-	}
-	return firstErr
+	return nil
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"lota/config"
 	"lota/runner"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFindCommandByPath(t *testing.T) {
@@ -216,11 +218,12 @@ func TestResolveDependencyLevels_ParallelFalse(t *testing.T) {
 	}
 }
 
-func TestRunCommand_PrintsDependencyProgress(t *testing.T) {
+func TestRunCommand_SequentialPrintsDependencyProgress(t *testing.T) {
+	parallelFalse := false
 	cfg := &config.AppConfig{
 		Commands: []config.Command{
 			{Name: "build", Script: "echo build >/dev/null"},
-			{Name: "test", Script: "echo test >/dev/null", Depends: []string{"build"}},
+			{Name: "test", Script: "echo test >/dev/null", Depends: []string{"build"}, Parallel: &parallelFalse},
 		},
 	}
 	if err := cfg.BuildIndexes(); err != nil {
@@ -256,6 +259,34 @@ func TestRunCommand_PrintsDependencyProgress(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "=> Running dependency: build") {
 		t.Fatalf("expected dependency progress output, got %q", buf.String())
+	}
+}
+
+func TestRunCommand_ParallelDoesNotBlockLevels(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "server", Script: "sleep 30"},
+			{Name: "client", Script: "echo client", Depends: []string{"server"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	result, err := FindCommandByPath(cfg, "client")
+	if err != nil {
+		t.Fatalf("FindCommandByPath() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = RunCommand(ctx, cfg, result, nil, runner.RunOptions{})
+	if err == nil {
+		t.Fatal("expected timeout from background server, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got: %v", err)
 	}
 }
 

@@ -254,6 +254,28 @@ func TestVar_UnmarshalYAML_Import(t *testing.T) {
 				Prefix:   "app",
 			},
 		},
+		{
+			name:  "inline import env without tag",
+			tag:   "!!str",
+			value: "import:env .env",
+			expected: Var{
+				IsFile:   true,
+				Format:   "env",
+				FromFile: ".env",
+				Prefix:   "",
+			},
+		},
+		{
+			name:  "inline import yaml with prefix without tag",
+			tag:   "!!str",
+			value: "import:yaml env.yaml public",
+			expected: Var{
+				IsFile:   true,
+				Format:   "yaml",
+				FromFile: "env.yaml",
+				Prefix:   "public",
+			},
+		},
 	}
 
 	for _, tt := range tests {

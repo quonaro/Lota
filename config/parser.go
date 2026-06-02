@@ -556,6 +556,27 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 		return nil
 	}
 
+	// Also support inline syntax without YAML tag: "import:env path prefix"
+	if strings.HasPrefix(value, "import:") {
+		v.IsFile = true
+		fields := strings.Fields(value)
+		if len(fields) == 0 {
+			return fmt.Errorf("line %d: import requires a file path", node.Line)
+		}
+		formatParts := strings.SplitN(fields[0], ":", 2)
+		if len(formatParts) != 2 {
+			return fmt.Errorf("line %d: invalid import format %q", node.Line, fields[0])
+		}
+		v.Format = formatParts[1]
+		if len(fields) > 1 {
+			v.FromFile = fields[1]
+		}
+		if len(fields) > 2 {
+			v.Prefix = fields[2]
+		}
+		return nil
+	}
+
 	// Format: name=value
 	parts := strings.SplitN(value, "=", 2)
 	if len(parts) == 2 {

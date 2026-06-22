@@ -446,9 +446,10 @@ build:
 		t.Fatalf("NewApp() error: %v", err)
 	}
 
+	app.name = "myapp"
 	var buf bytes.Buffer
 	app.opts.Stdout = &buf
-	app.PrintHelp("myapp")
+	app.PrintHelp()
 
 	out := buf.String()
 	if !strings.Contains(out, "Usage: myapp") {

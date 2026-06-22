@@ -283,6 +283,7 @@ func TestInterpolate_DeprecationWarning(t *testing.T) {
 		Vars:              map[string]string{},
 		Args:              map[string]string{"port": "8080"},
 		DeprecationWarned: make(map[string]bool),
+		WarnWriter:        os.Stderr,
 	}
 	_, _ = Interpolate("server --port={{port}}", ctx)
 
@@ -307,6 +308,7 @@ func TestInterpolate_DeprecationWarning_Var(t *testing.T) {
 		Vars:              map[string]string{"ENV_VAR": "production"},
 		Args:              map[string]string{},
 		DeprecationWarned: make(map[string]bool),
+		WarnWriter:        os.Stderr,
 	}
 	_, _ = Interpolate("echo {{ENV_VAR}}", ctx)
 

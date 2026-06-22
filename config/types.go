@@ -59,6 +59,7 @@ type Command struct {
 	After        string     `yaml:"after"`
 	Fallback     string     `yaml:"fallback"`
 	Finally      string     `yaml:"finally"`
+	Native       bool       `yaml:"native,omitempty"`
 }
 
 type Arg struct {

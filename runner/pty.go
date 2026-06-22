@@ -50,7 +50,7 @@ func runWithPTY(cmd *exec.Cmd, stdout, stderr io.Writer, ctx context.Context, sh
 		_, _ = io.Copy(stderr, ptmxErr)
 	}()
 
-	err = gracefulWait(cmd, ctx, shutdownOnce)
+	err = gracefulWait(cmd, ctx, shutdownOnce, stderr)
 	wg.Wait()
 	return true, err
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -92,7 +93,7 @@ func hasField(node *yaml.Node, field string) bool {
 }
 
 var groupFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "shell", "log"}
-var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log"}
+var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log", "native"}
 
 func suggestField(unknown string, valid []string) string {
 	best := ""
@@ -231,6 +232,26 @@ func normalizeImportTags(node *yaml.Node) []string {
 
 func ParseConfigWithWriter(path string, warnTo io.Writer) (*AppConfig, error) {
 	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConfigFromBytesWithWriter(data, warnTo)
+}
+
+func ParseConfigFromBytes(data []byte) (*AppConfig, error) {
+	return ParseConfigFromBytesWithWriter(data, os.Stderr)
+}
+
+func ParseConfigFromBytesWithWriter(data []byte, warnTo io.Writer) (*AppConfig, error) {
+	return ParseConfigFromReaderWithWriter(bytes.NewReader(data), warnTo)
+}
+
+func ParseConfigFromReader(r io.Reader) (*AppConfig, error) {
+	return ParseConfigFromReaderWithWriter(r, os.Stderr)
+}
+
+func ParseConfigFromReaderWithWriter(r io.Reader, warnTo io.Writer) (*AppConfig, error) {
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
@@ -441,6 +462,12 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			c.Fallback = valueNode.Value
 		case "finally":
 			c.Finally = valueNode.Value
+		case "native":
+			var native bool
+			if err := valueNode.Decode(&native); err != nil {
+				return fmt.Errorf("%d: invalid native value in command %q: %w", valueNode.Line, c.Name, err)
+			}
+			c.Native = native
 		case "depends":
 			if err := valueNode.Decode(&c.Depends); err != nil {
 				return fmt.Errorf("%d: error parsing depends in command %q: %w", valueNode.Line, c.Name, err)

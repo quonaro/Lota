@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"io"
 	"lota/config"
 	"os"
 	"regexp"
@@ -32,6 +33,7 @@ type InterpolationContext struct {
 	Args              map[string]string
 	ArgDefs           []config.Arg    // Argument definitions for type-aware interpolation
 	DeprecationWarned map[string]bool // Tracks which deprecation warnings have been shown
+	WarnWriter        io.Writer       // Destination for deprecation warnings; nil suppresses them
 }
 
 // findSimilarVars finds variables with similar prefix to help users debug
@@ -108,7 +110,9 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 				context.DeprecationWarned = make(map[string]bool)
 			}
 			if !context.DeprecationWarned[placeholder] {
-				fmt.Fprintf(os.Stderr, "\033[33mwarning: {{%s}} interpolation is deprecated, use $%s instead\033[0m\n", placeholder, placeholder)
+				if context.WarnWriter != nil {
+					_, _ = fmt.Fprintf(context.WarnWriter, "\033[33mwarning: {{%s}} interpolation is deprecated, use $%s instead\033[0m\n", placeholder, placeholder)
+				}
 				context.DeprecationWarned[placeholder] = true
 			}
 		} else if _, isVar := context.Vars[placeholder]; isVar {
@@ -116,7 +120,9 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 				context.DeprecationWarned = make(map[string]bool)
 			}
 			if !context.DeprecationWarned[placeholder] {
-				fmt.Fprintf(os.Stderr, "\033[33mwarning: {{%s}} interpolation is deprecated, use $%s instead\033[0m\n", placeholder, placeholder)
+				if context.WarnWriter != nil {
+					_, _ = fmt.Fprintf(context.WarnWriter, "\033[33mwarning: {{%s}} interpolation is deprecated, use $%s instead\033[0m\n", placeholder, placeholder)
+				}
 				context.DeprecationWarned[placeholder] = true
 			}
 		}

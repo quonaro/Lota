@@ -1,0 +1,223 @@
+package engine
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"lota/config"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+func TestResolveDependencyLevels(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "compile", Script: "echo compile"},
+			{Name: "build", Script: "echo build", Depends: []string{"compile"}},
+			{Name: "lint", Script: "echo lint"},
+			{Name: "test", Script: "echo test", Depends: []string{"build", "lint"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	result, _ := config.FindCommandByPath(cfg, "test")
+	levels, err := resolveDependencyLevels(cfg, result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(levels) != 2 {
+		t.Fatalf("expected 2 levels, got %d", len(levels))
+	}
+
+	// Level 0: compile, lint (no deps)
+	lvl0 := levels[0]
+	if len(lvl0) != 2 {
+		t.Errorf("level 0 expected 2 commands, got %d", len(lvl0))
+	}
+	names := make([]string, len(lvl0))
+	for i, r := range lvl0 {
+		names[i] = r.Command.Name
+	}
+	if !contains(names, "compile") || !contains(names, "lint") {
+		t.Errorf("level 0 expected [compile lint], got %v", names)
+	}
+
+	// Level 1: build (depends on compile)
+	lvl1 := levels[1]
+	if len(lvl1) != 1 || lvl1[0].Command.Name != "build" {
+		t.Errorf("level 1 expected [build], got %v", lvl1)
+	}
+}
+
+func TestResolveDependencyLevels_ParallelFalse(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "a", Script: "echo a"},
+			{Name: "b", Script: "echo b"},
+			{Name: "c", Script: "echo c", Depends: []string{"a", "b"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	result, _ := config.FindCommandByPath(cfg, "c")
+	levels, err := resolveDependencyLevels(cfg, result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(levels) != 1 {
+		t.Fatalf("expected 1 level, got %d", len(levels))
+	}
+	if len(levels[0]) != 2 {
+		t.Fatalf("expected 2 commands in level 0, got %d", len(levels[0]))
+	}
+}
+
+func TestRunCommand_SequentialPrintsDependencyProgress(t *testing.T) {
+	parallelFalse := false
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "build", Script: "echo build >/dev/null"},
+			{Name: "test", Script: "echo test >/dev/null", Depends: []string{"build"}, Parallel: &parallelFalse},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	opts := Options{Stdout: &stdout, Stderr: &stdout}
+
+	err := Run(context.Background(), cfg, []string{"test"}, opts)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "=> Running dependency: build") {
+		t.Fatalf("expected dependency progress output, got %q", stdout.String())
+	}
+}
+
+func TestRunCommand_ParallelDoesNotBlockLevels(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "server", Script: "sleep 30"},
+			{Name: "client", Script: "echo client", Depends: []string{"server"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := Run(ctx, cfg, []string{"client"}, Options{})
+	if err == nil {
+		t.Fatal("expected timeout from background server, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got: %v", err)
+	}
+}
+
+func TestRunCommand_NestedCommandArgsDefault(t *testing.T) {
+	yamlContent := `
+version:
+  desc: Version management commands
+  bump:
+    args:
+    - "type:str=none"
+    desc: Bump version
+    script: |
+      echo $type
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.ParseConfig(tmpFile)
+	if err != nil {
+		t.Fatalf("ParseConfig() error: %v", err)
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"version", "bump"}, Options{DryRun: true, Stdout: &stdout, Stderr: &stdout}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+}
+
+func TestRunCommand(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "hello", Script: "echo hello"},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"hello"}, Options{Stdout: &stdout, Stderr: &stdout}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "hello") {
+		t.Fatalf("expected output to contain 'hello', got %q", stdout.String())
+	}
+}
+
+func TestRunCommandNotFound(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "hello", Script: "echo hello"},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	if err := Run(context.Background(), cfg, []string{"missing"}, Options{}); err == nil {
+		t.Fatal("expected error for missing command")
+	}
+}
+
+func TestLoadConfig(t *testing.T) {
+	data := []byte(`
+hello:
+  script: echo hello
+`)
+	cfg, err := LoadConfig(data)
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+	if len(cfg.Commands) != 1 || cfg.Commands[0].Name != "hello" {
+		t.Fatalf("expected command 'hello', got %v", cfg.Commands)
+	}
+}
+
+func TestLoadConfigInvalid(t *testing.T) {
+	data := []byte(`not valid yaml: [`)
+	if _, err := LoadConfig(data); err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+}

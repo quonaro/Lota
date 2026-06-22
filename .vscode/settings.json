@@ -1,16 +1,17 @@
 {
-    "files.exclude": {
-        "**/.git": true,
-        "**/.svn": true,
-        "**/.hg": true,
-        "**/.DS_Store": true,
-        "**/Thumbs.db": true,
-        ".vscode": false,
-        ".windsurf": true,
-    },
-    "editor.formatOnSave": true,
-    "go.formatTool": "goimports",
-    "[go]": {
-        "editor.defaultFormatter": "golang.go"
-    }
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    ".vscode": false,
+    ".windsurf": true,
+    ".devin": true
+  },
+  "editor.formatOnSave": true,
+  "go.formatTool": "goimports",
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  }
 }

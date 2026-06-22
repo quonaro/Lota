@@ -91,7 +91,7 @@ func positionalCompletionHint(cfg *config.AppConfig, parsedArgs []icomp.Arg) str
 		tokens = append(tokens, arg.Text)
 	}
 
-	result, _, lastFound := ResolveCommand(cfg, tokens)
+	result, _, lastFound := config.ResolveCommand(cfg, tokens)
 	if !result.Exists || result.Command == nil {
 		return ""
 	}

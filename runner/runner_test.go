@@ -727,7 +727,7 @@ func TestGracefulWait_NormalCompletion(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 
-	if err := gracefulWait(cmd, context.Background(), nil); err != nil {
+	if err := gracefulWait(cmd, context.Background(), nil, nil); err != nil {
 		t.Fatalf("expected nil, got: %v", err)
 	}
 }
@@ -747,7 +747,7 @@ func TestGracefulWait_SIGTERM(t *testing.T) {
 		cancel()
 	}()
 
-	err := gracefulWait(cmd, ctx, nil)
+	err := gracefulWait(cmd, ctx, nil, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got: %v", err)
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"lota/config"
-	"lota/runner"
+	"lota/engine"
 	"os"
 	"path/filepath"
 )
@@ -54,7 +54,7 @@ func Run(ctx context.Context) error {
 	// Check for help flag before ResolveCommand (it skips flags)
 	if hasHelpFlag(remainingArgs) {
 		// Resolve command to show help for it
-		result, _, _ := ResolveCommand(cfg, remainingArgs)
+		result, _, _ := config.ResolveCommand(cfg, remainingArgs)
 		if !result.Exists {
 			return commandNotFoundError(cfg, remainingArgs)
 		}
@@ -71,7 +71,7 @@ func Run(ctx context.Context) error {
 		return nil
 	}
 
-	result, cmdArgs, _ := ResolveCommand(cfg, remainingArgs)
+	result, cmdArgs, _ := config.ResolveCommand(cfg, remainingArgs)
 	if !result.Exists {
 		return commandNotFoundError(cfg, remainingArgs)
 	}
@@ -94,12 +94,21 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	opts := runner.RunOptions{
+	opts := engine.Options{
 		Verbose:    flags.Verbose,
 		DryRun:     flags.DryRun,
 		ConfigDir:  configDir,
 		WorkingDir: cwd,
 		Timeout:    flags.Timeout,
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
+		PrefixFormatter: func(path string, cmd *config.Command, groups []*config.Group) string {
+			colorName := resolveColor(cmd.Color, cmd.InheritColor, groups)
+			if colorName == "" {
+				colorName = hashColor(path)
+			}
+			return colorize(fmt.Sprintf("[%s]", path), colorName)
+		},
 	}
-	return RunCommand(ctx, cfg, result, cmdArgs, opts)
+	return engine.Run(ctx, cfg, remainingArgs, opts)
 }

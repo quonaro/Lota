@@ -1,0 +1,272 @@
+# Embedding Lota
+
+Lota can be embedded into other Go binaries as a library. The `lota/engine` package provides a clean API for loading configurations and running commands programmatically, without depending on CLI-specific code like flag parsing, shell completion, or `os.Args`.
+
+## Why embed?
+
+- Ship a single binary with a built-in task runner (e.g., `outless run` = `lota run`).
+- Provide a task-driven CLI without maintaining a separate YAML parser or shell executor.
+- Keep the same declarative configuration (`lota.yml`) while wrapping it with your own branding and logic.
+
+## Quick start
+
+Install Lota as a module dependency:
+
+```bash
+go get github.com/quonaro/lota
+```
+
+### Minimal example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "lota/engine"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // Load config from a file
+    data, err := os.ReadFile("lota.yml")
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "read config: %v\n", err)
+        os.Exit(1)
+    }
+
+    cfg, err := engine.LoadConfig(data)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "config: %v\n", err)
+        os.Exit(1)
+    }
+
+    // Run a command using CLI-style arguments
+    err = engine.Run(ctx, cfg, []string{"deploy", "prod", "--force"}, engine.Options{
+        Stdout: os.Stdout,
+        Stderr: os.Stderr,
+    })
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "run: %v\n", err)
+        os.Exit(1)
+    }
+}
+```
+
+### With `//go:embed`
+
+You can embed the configuration directly into the binary:
+
+```go
+package main
+
+import (
+    "_embed"
+    "context"
+    "fmt"
+    "os"
+
+    "lota/engine"
+)
+
+//go:embed lota.yml
+var lotaYAML []byte
+
+func main() {
+    ctx := context.Background()
+
+    cfg, err := engine.LoadConfig(lotaYAML)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "config: %v\n", err)
+        os.Exit(1)
+    }
+
+    if err := engine.Run(ctx, cfg, os.Args[1:], engine.Options{
+        Stdout: os.Stdout,
+        Stderr: os.Stderr,
+    }); err != nil {
+        fmt.Fprintf(os.Stderr, "run: %v\n", err)
+        os.Exit(1)
+    }
+}
+```
+
+## API Reference
+
+### `engine.Options`
+
+```go
+type Options struct {
+    Verbose         bool
+    DryRun          bool
+    ConfigDir       string
+    WorkingDir      string
+    Timeout         time.Duration
+    Stdout          io.Writer
+    Stderr          io.Writer
+    PrefixFormatter func(path string, cmd *config.Command, groups []*config.Group) string
+}
+```
+
+| Field             | Description                                                            |
+| ----------------- | ---------------------------------------------------------------------- |
+| `Verbose`         | Enable verbose logging.                                                |
+| `DryRun`          | Print interpolated scripts without executing.                          |
+| `ConfigDir`       | Base directory for resolving relative paths (e.g., log files).         |
+| `WorkingDir`      | Caller's current working directory; used for `$CWD` interpolation.     |
+| `Timeout`         | Maximum execution time (0 = no timeout).                               |
+| `Stdout`          | Where command output is written. Defaults to `os.Stdout` if nil.       |
+| `Stderr`          | Where errors and warnings are written. Defaults to `os.Stderr` if nil. |
+| `PrefixFormatter` | Optional formatter for dependency output prefixes.                     |
+
+### `engine.LoadConfig(data []byte) (*config.AppConfig, error)`
+
+Parses YAML, builds indexes, and validates the configuration. Returns a ready-to-use `*config.AppConfig`.
+
+### `engine.Run(ctx, cfg, args, opts) error`
+
+CLI-style entrypoint. `args` is the full command line (e.g., `[]string{"deploy", "prod", "--force"}`). It greedily resolves the command path from the config tree, then runs the target command including dependencies.
+
+### `engine.RunCommand(ctx, cfg, path, cmdArgs, opts) error`
+
+Programmatic entrypoint. `path` is a dot-separated command path (e.g., `"deploy.prod"`). `cmdArgs` are the command-specific arguments after the path is resolved.
+
+## Comparison with `cli.Run`
+
+|                 | `cli.Run(ctx)`                | `engine.Run(ctx, cfg, args, opts)` |
+| --------------- | ----------------------------- | ---------------------------------- |
+| `os.Args`       | Reads directly                | Accepts explicit `[]string`        |
+| `os.Exit`       | Uses `os.Exit` for completion | Never calls `os.Exit`              |
+| Output          | Hardcoded `os.Stdout/Stderr`  | Configurable `io.Writer`           |
+| Config source   | Filesystem only               | Can use `[]byte` / `io.Reader`     |
+| Help/Completion | Built-in                      | Not included; you build your own   |
+| Use case        | Standalone binary             | Embedded library                   |
+
+## Advanced: Custom prefix formatter
+
+When dependencies run in parallel, Lota prefixes each line of output with the dependency path. You can customize this prefix (e.g., add ANSI colors):
+
+```go
+opts := engine.Options{
+    Stdout: os.Stdout,
+    Stderr: os.Stderr,
+    PrefixFormatter: func(path string, cmd *config.Command, groups []*config.Group) string {
+        return fmt.Sprintf("\033[36m[%s]\033[0m", path)
+    },
+}
+```
+
+## Advanced: Programmatic command lookup
+
+If you need to inspect the configuration before running:
+
+```go
+result, err := config.FindCommandByPath(cfg, "infra.docker.up")
+if err != nil {
+    // handle error
+}
+
+fmt.Println("Command:", result.Command.Name)
+fmt.Println("Script:", result.Command.Script)
+
+// Run it manually
+err = engine.RunCommand(ctx, cfg, "infra.docker.up", nil, opts)
+```
+
+## Advanced: Native commands
+
+You can declare commands in `lota.yml` that execute Go code instead of shell scripts. This is useful when you need direct programmatic control (e.g., calling internal APIs, databases, or complex logic) while keeping the declarative configuration.
+
+### Declaring a native command
+
+```yaml
+deploy:
+  desc: Deploy via native Go code
+  native: true
+  vars:
+    - REGION=eu-west-1
+  args:
+    - "env:str=dev"
+```
+
+The `native: true` marker tells Lota to look up a registered Go handler instead of running a shell script. The command can still use `vars`, `args`, `depends`, and `parallel` like any other command.
+
+### Registering a handler
+
+```go
+engine.RegisterNative("deploy", func(ctx context.Context, nctx engine.NativeContext) error {
+    env := nctx.Args["env"]       // "dev" or "prod"
+    region := nctx.Vars["REGION"] // "eu-west-1"
+
+    fmt.Fprintf(nctx.Stdout, "Deploying to %s in %s\n", env, region)
+    // Any Go code: HTTP requests, database calls, etc.
+    return nil
+})
+```
+
+### `engine.NativeContext`
+
+```go
+type NativeContext struct {
+    Vars   map[string]string
+    Args   map[string]string
+    Stdout io.Writer
+    Stderr io.Writer
+}
+```
+
+| Field    | Description                                 |
+| -------- | ------------------------------------------- |
+| `Vars`   | Resolved variables (app → group → command). |
+| `Args`   | Parsed CLI arguments with defaults applied. |
+| `Stdout` | Where to write command output.              |
+| `Stderr` | Where to write errors and warnings.         |
+
+### Error handling
+
+If a command is marked `native: true` but no handler was registered, `engine.Run` returns an error:
+
+```
+native command "deploy" has no registered handler
+```
+
+Register handlers before calling `engine.Run`. The registry is global and safe for concurrent use.
+
+### Native commands as dependencies
+
+Native commands can be dependencies of shell commands (and vice versa). Lota resolves variables and arguments for each command independently, then calls either the Go handler or the shell executor.
+
+```yaml
+build:
+  native: true
+
+test:
+  script: go test ./...
+  depends:
+    - build
+```
+
+```go
+engine.RegisterNative("build", func(ctx context.Context, nctx engine.NativeContext) error {
+    // Run Go build
+    return nil
+})
+```
+
+## Troubleshooting
+
+### "command not found" errors
+
+Make sure you called `cfg.BuildIndexes()` after parsing. `engine.LoadConfig` does this for you.
+
+### No output captured
+
+Ensure you set `Stdout` and `Stderr` in `engine.Options`. If left nil, output goes to `os.Stdout`/`os.Stderr` of the host process.
+
+### PTY not used when embedding
+
+If you pass a custom `io.Writer` (e.g., `bytes.Buffer`), Lota cannot allocate a pseudo-terminal because it must tee output into your writer. If you need TTY detection (e.g., for colored child output), pass `os.Stdout`/`os.Stderr` directly.

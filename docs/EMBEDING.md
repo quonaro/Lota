@@ -107,7 +107,7 @@ func main() {
 
 ### Loading from a file path
 
-If your config lives at a known path (e.g. shipped next to the binary or inside an `embed.FS` extracted to a temp directory), use `LoadConfigFromPath`. It returns both the parsed config and its directory, which is useful for `engine.Options.ConfigDir`:
+If your config lives at a known path, use `LoadConfigFromPath`. The path can have **any file name** — `lota.yml`, `commands.yaml`, `tasks.yml`, etc. It returns both the parsed config and its directory, which is useful for `engine.Options.ConfigDir`:
 
 ```go
 package main
@@ -123,7 +123,8 @@ import (
 func main() {
     ctx := context.Background()
 
-    cfg, configDir, err := engine.LoadConfigFromPath("/etc/myapp/tasks.yml")
+    // Any file name works
+    cfg, configDir, err := engine.LoadConfigFromPath("./my-tasks.yaml")
     if err != nil {
         fmt.Fprintf(os.Stderr, "config: %v\n", err)
         os.Exit(1)
@@ -143,6 +144,12 @@ func main() {
         os.Exit(1)
     }
 }
+```
+
+With the `App` wrapper the same looks even shorter:
+
+```go
+app, err := engine.NewAppFromPath("./my-tasks.yaml", engine.Options{})
 ```
 
 ### Embedded help

@@ -478,3 +478,29 @@ deploy:
 		t.Errorf("expected ConfigDir=%q, got %q", filepath.Dir(tmpFile), app.opts.ConfigDir)
 	}
 }
+
+func TestLoadConfigFromPath_ArbitraryName(t *testing.T) {
+	yamlContent := `
+build:
+  desc: Build project
+  script: echo build
+`
+	tmpDir := t.TempDir()
+
+	// Non-standard name: not lota.yml or lota.yaml
+	tmpFile := filepath.Join(tmpDir, "my-custom-tasks.yaml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, configDir, err := LoadConfigFromPath(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error: %v", err)
+	}
+	if len(cfg.Commands) != 1 || cfg.Commands[0].Name != "build" {
+		t.Fatalf("expected command 'build', got %v", cfg.Commands)
+	}
+	if configDir != tmpDir {
+		t.Fatalf("expected configDir %q, got %q", tmpDir, configDir)
+	}
+}

@@ -3,18 +3,18 @@
 # and loaded via engine.NewAppFromPath or embedded with //go:embed.
 
 vars:
-  - "APP_NAME=myapp"
-  - "CONFIG_DIR=./config"
+- "APP_NAME=myapp"
+- "CONFIG_DIR=./config"
 
 # Top-level groups appear as top-level commands in help.
 # They can be nested recursively.
 admin:
   desc: Administrative utilities
   color: cyan
-  inheritColor: true
+  inherit_color: true
 
   vars:
-    - "ADMIN_LOG_LEVEL=info"
+  - "ADMIN_LOG_LEVEL=info"
 
   # Sub-groups
   users:
@@ -27,8 +27,8 @@ admin:
       color: yellow
       native: true
       args:
-        - "username:str"
-        - "password:str"
+      - "username:str"
+      - "password:str"
 
   # Commands directly inside the 'admin' group
   version:
@@ -50,8 +50,8 @@ deploy:
     echo "Deploying $APP_NAME..."
   # Dependencies run before the script
   depends:
-    - build
-    - test
+  - build
+  - test
 
 # Parallel execution (dependencies run concurrently)
 lint:
@@ -74,11 +74,11 @@ server:
   color: higreen
   native: true
   args:
-    - "port:int"
-    - "host:str"
+  - "port:int"
+  - "host:str"
   vars:
-    - "DEFAULT_PORT=8080"
-    - "DEFAULT_HOST=0.0.0.0"
+  - "DEFAULT_PORT=8080"
+  - "DEFAULT_HOST=0.0.0.0"
 
 # Commands can use custom working directories and shells
 migrate:

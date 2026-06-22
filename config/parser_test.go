@@ -880,3 +880,65 @@ build:
 		t.Errorf("Expected 'Did you mean' suggestion in error, got: %s", msg)
 	}
 }
+
+func TestParseConfig_NativeWithoutScript(t *testing.T) {
+	yamlContent := `
+deploy:
+  desc: Deploy via native code
+  native: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	cfg, err := ParseConfig(tmpFile)
+	if err != nil {
+		t.Fatalf("ParseConfig() error: %v", err)
+	}
+	if len(cfg.Commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(cfg.Commands))
+	}
+	cmd := cfg.Commands[0]
+	if cmd.Name != "deploy" {
+		t.Errorf("expected command name 'deploy', got %q", cmd.Name)
+	}
+	if !cmd.Native {
+		t.Errorf("expected Native=true, got %v", cmd.Native)
+	}
+	if cmd.Script != "" {
+		t.Errorf("expected empty script, got %q", cmd.Script)
+	}
+}
+
+func TestParseConfig_NativeInGroupWithoutScript(t *testing.T) {
+	yamlContent := `
+admin:
+  reset:
+    desc: Reset password
+    native: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	cfg, err := ParseConfig(tmpFile)
+	if err != nil {
+		t.Fatalf("ParseConfig() error: %v", err)
+	}
+	if len(cfg.Groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(cfg.Groups))
+	}
+	group := cfg.Groups[0]
+	if len(group.Commands) != 1 {
+		t.Fatalf("expected 1 command in group, got %d", len(group.Commands))
+	}
+	cmd := group.Commands[0]
+	if cmd.Name != "reset" {
+		t.Errorf("expected command name 'reset', got %q", cmd.Name)
+	}
+	if !cmd.Native {
+		t.Errorf("expected Native=true, got %v", cmd.Native)
+	}
+}

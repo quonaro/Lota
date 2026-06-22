@@ -311,8 +311,8 @@ func ParseConfigFromReaderWithWriter(r io.Reader, warnTo io.Writer) (*AppConfig,
 			}
 			config.Log = logCfg
 		default:
-			// Distinguish command (has "script" field) from group
-			if hasField(valueNode, "script") {
+			// Distinguish command (has "script" or "native" field) from group
+			if hasField(valueNode, "script") || hasField(valueNode, "native") {
 				var cmd Command
 				cmd.Name = key
 				if err := valueNode.Decode(&cmd); err != nil {
@@ -385,7 +385,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 			}
 			g.Log = logCfg
 		default:
-			if hasField(valueNode, "script") {
+			if hasField(valueNode, "script") || hasField(valueNode, "native") {
 				var cmd Command
 				if err := valueNode.Decode(&cmd); err != nil {
 					return fmt.Errorf("%d: error parsing command %q in group %q: %w", node.Content[i].Line, key, g.Name, err)

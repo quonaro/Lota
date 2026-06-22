@@ -57,9 +57,9 @@ func main() {
 }
 ```
 
-### With `//go:embed`
+### With `//go:embed` (concise wrapper)
 
-You can embed the configuration directly into the binary:
+For the shortest possible boilerplate, use `engine.NewApp`:
 
 ```go
 package main
@@ -67,6 +67,7 @@ package main
 import (
     "_embed"
     "context"
+    "errors"
     "fmt"
     "os"
 
@@ -77,23 +78,32 @@ import (
 var lotaYAML []byte
 
 func main() {
-    ctx := context.Background()
-
-    cfg, err := engine.LoadConfig(lotaYAML)
+    app, err := engine.NewApp(lotaYAML, engine.Options{})
     if err != nil {
         fmt.Fprintf(os.Stderr, "config: %v\n", err)
         os.Exit(1)
     }
 
-    if err := engine.Run(ctx, cfg, os.Args[1:], engine.Options{
-        Stdout: os.Stdout,
-        Stderr: os.Stderr,
-    }); err != nil {
+    engine.RegisterNative("deploy", deployHandler)
+
+    if len(os.Args) < 2 {
+        app.PrintHelp("myapp")
+        return
+    }
+
+    if err := app.Run(context.Background(), os.Args[1:]); err != nil {
+        var groupErr *engine.GroupError
+        if errors.As(err, &groupErr) {
+            app.PrintGroupHelp(groupErr.Groups, "myapp")
+            return
+        }
         fmt.Fprintf(os.Stderr, "run: %v\n", err)
         os.Exit(1)
     }
 }
 ```
+
+`NewApp` sets `Stdout`/`Stderr` defaults automatically and keeps the config alive in a single struct.
 
 ### Loading from a file path
 
@@ -237,6 +247,14 @@ type GroupError struct {
 }
 ```
 
+### `engine.NewApp(data []byte, opts Options) (*App, error)`
+
+Concise wrapper that parses config, sets default writers, and returns a bundled `*App`. Use `app.Run`, `app.PrintHelp`, and `app.PrintGroupHelp` instead of managing the config pointer yourself.
+
+### `engine.NewAppFromPath(path string, opts Options) (*App, error)`
+
+Same as `NewApp`, but loads from a file path and automatically sets `ConfigDir`.
+
 ## Comparison with `cli.Run`
 
 |                 | `cli.Run(ctx)`                | `engine.Run(ctx, cfg, args, opts)` |
@@ -372,3 +390,17 @@ Ensure you set `Stdout` and `Stderr` in `engine.Options`. If left nil, output go
 ### PTY not used when embedding
 
 If you pass a custom `io.Writer` (e.g., `bytes.Buffer`), Lota cannot allocate a pseudo-terminal because it must tee output into your writer. If you need TTY detection (e.g., for colored child output), pass `os.Stdout`/`os.Stderr` directly.
+
+### Binary size
+
+Lota `engine` itself is tiny (only `yaml.v3` as a non-std dependency). Most of the binary size comes from your application code. To reduce it:
+
+```bash
+# Strip debug info and symbol table
+go build -ldflags="-s -w" -o outless ./cmd/outless
+
+# Compress with UPX (optional, reduces ~50-70%)
+upx --best outless
+```
+
+If you only use native commands (no shell scripts), `github.com/creack/pty` is excluded on non-Unix builds automatically via build tags.

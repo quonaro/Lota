@@ -388,3 +388,93 @@ func TestPrintGroupHelpFallback(t *testing.T) {
 		t.Errorf("expected command 'build', got: %q", out)
 	}
 }
+
+func TestApp_NewApp(t *testing.T) {
+	data := []byte(`
+hello:
+  script: echo hello
+`)
+	app, err := NewApp(data, Options{})
+	if err != nil {
+		t.Fatalf("NewApp() error: %v", err)
+	}
+	if app.Config() == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if app.opts.Stdout == nil {
+		t.Error("expected default Stdout")
+	}
+}
+
+func TestApp_NewAppInvalid(t *testing.T) {
+	_, err := NewApp([]byte(`not yaml`), Options{})
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+}
+
+func TestApp_Run(t *testing.T) {
+	data := []byte(`
+hello:
+  script: echo hello
+`)
+	app, err := NewApp(data, Options{})
+	if err != nil {
+		t.Fatalf("NewApp() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app.opts.Stdout = &stdout
+	app.opts.Stderr = &stdout
+
+	if err := app.Run(context.Background(), []string{"hello"}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "hello") {
+		t.Fatalf("expected output 'hello', got: %q", stdout.String())
+	}
+}
+
+func TestApp_PrintHelp(t *testing.T) {
+	data := []byte(`
+build:
+  desc: Build project
+  script: echo build
+`)
+	app, err := NewApp(data, Options{})
+	if err != nil {
+		t.Fatalf("NewApp() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	app.opts.Stdout = &buf
+	app.PrintHelp("myapp")
+
+	out := buf.String()
+	if !strings.Contains(out, "Usage: myapp") {
+		t.Errorf("expected usage header, got: %q", out)
+	}
+	if !strings.Contains(out, "build") {
+		t.Errorf("expected command 'build', got: %q", out)
+	}
+}
+
+func TestAppFromPath(t *testing.T) {
+	yamlContent := `
+deploy:
+  desc: Deploy app
+  native: true
+`
+	tmpFile := filepath.Join(t.TempDir(), "tasks.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, err := NewAppFromPath(tmpFile, Options{})
+	if err != nil {
+		t.Fatalf("NewAppFromPath() error: %v", err)
+	}
+	if app.opts.ConfigDir != filepath.Dir(tmpFile) {
+		t.Errorf("expected ConfigDir=%q, got %q", filepath.Dir(tmpFile), app.opts.ConfigDir)
+	}
+}

@@ -2,7 +2,7 @@ package config
 
 import (
 	"errors"
-	"lota/shared"
+	"github.com/quonaro/lota/shared"
 	"os"
 	"path/filepath"
 	"testing"

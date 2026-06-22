@@ -3,7 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
-	"lota/shared"
+	"github.com/quonaro/lota/shared"
 	"os"
 	"path/filepath"
 	"strings"

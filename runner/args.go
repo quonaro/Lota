@@ -2,7 +2,7 @@ package runner
 
 import (
 	"fmt"
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"strings"
 )
 

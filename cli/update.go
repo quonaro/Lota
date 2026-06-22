@@ -3,8 +3,8 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/quonaro/lota/shared"
 	"io"
-	"lota/shared"
 	"net/http"
 	"os"
 	"path/filepath"

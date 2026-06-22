@@ -1,7 +1,7 @@
 package runner
 
 import (
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"runtime"
 )
 

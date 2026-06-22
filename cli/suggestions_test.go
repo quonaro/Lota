@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"strings"
 	"testing"
 )

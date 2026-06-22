@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"lota/config"
+	"github.com/quonaro/lota/config"
 )
 
 func TestRegisterNative(t *testing.T) {

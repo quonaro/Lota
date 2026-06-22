@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"sort"
 	"strings"
 )

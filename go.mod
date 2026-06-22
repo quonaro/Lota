@@ -1,4 +1,4 @@
-module lota
+module github.com/quonaro/lota
 
 go 1.26.1
 

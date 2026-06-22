@@ -2,8 +2,8 @@ package runner
 
 import (
 	"fmt"
+	"github.com/quonaro/lota/config"
 	"io"
-	"lota/config"
 	"os"
 	"regexp"
 	"sort"

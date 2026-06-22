@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"lota/config"
-	"lota/runner"
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/runner"
 )
 
 // Options controls execution behavior for embedded usage.

@@ -2,7 +2,7 @@ package runner
 
 import (
 	"bytes"
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"os"
 	"strings"
 	"testing"

@@ -3,10 +3,10 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/runner"
+	"github.com/quonaro/lota/shared"
 	"hash/fnv"
-	"lota/config"
-	"lota/runner"
-	"lota/shared"
 	"os"
 	"path/filepath"
 	"strconv"

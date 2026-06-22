@@ -3,8 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"lota/config"
-	"lota/engine"
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/engine"
 	"os"
 	"path/filepath"
 )

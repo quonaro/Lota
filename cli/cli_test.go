@@ -2,7 +2,7 @@ package cli
 
 import (
 	"context"
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"os"
 	"reflect"
 	"testing"

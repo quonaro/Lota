@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"lota/config"
+	"github.com/quonaro/lota/config"
 	"os"
 	"path/filepath"
 	"strings"

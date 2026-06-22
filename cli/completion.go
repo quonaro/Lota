@@ -2,9 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/runner"
 	"io"
-	"lota/config"
-	"lota/runner"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,7 +13,7 @@ import (
 	"github.com/posener/complete/v2"
 	"github.com/posener/complete/v2/predict"
 
-	icomp "lota/cli/internal/complete"
+	icomp "github.com/quonaro/lota/cli/internal/complete"
 )
 
 const completionHintPrefix = "__hint__:"

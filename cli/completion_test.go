@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"lota/cli/internal/complete"
-	"lota/config"
+	"github.com/quonaro/lota/cli/internal/complete"
+	"github.com/quonaro/lota/config"
 )
 
 func TestBuildCompletion_EmptyConfig(t *testing.T) {

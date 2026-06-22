@@ -2,8 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"github.com/quonaro/lota/config"
 	"io"
-	"lota/config"
 	"os"
 	"path/filepath"
 )

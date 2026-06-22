@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"lota/cli"
-	"lota/runner"
+	"github.com/quonaro/lota/cli"
+	"github.com/quonaro/lota/runner"
 	"os"
 	"os/signal"
 	"syscall"

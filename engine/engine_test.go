@@ -480,6 +480,35 @@ deploy:
 	}
 }
 
+func TestAppBuilder(t *testing.T) {
+	data := []byte(`
+hello:
+  desc: Say hello
+  native: true
+`)
+
+	var called bool
+	app, err := NewBuilder("myapp", data).
+		RegisterNative("hello", func(ctx context.Context, nctx NativeContext) error {
+			called = true
+			return nil
+		}).
+		Build()
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if app.name != "myapp" {
+		t.Errorf("expected name=myapp, got %q", app.name)
+	}
+
+	if err := app.Run(context.Background(), []string{"hello"}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected native handler to be called")
+	}
+}
+
 func TestLoadConfigFromPath_ArbitraryName(t *testing.T) {
 	yamlContent := `
 build:

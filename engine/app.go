@@ -67,33 +67,28 @@ func (a *App) PrintGroupHelp(groups []*config.Group) {
 	PrintGroupHelp(a.cfg, groups, a.opts.Stdout, a.name)
 }
 
-// AppBuilder provides a fluent API for constructing an App.
+// AppBuilder provides a class-like API for constructing an App.
+// Create it with NewBuilder, register natives with RegisterNative, then Build.
 type AppBuilder struct {
+	name    string
 	data    []byte
 	path    string
-	name    string
 	natives map[string]NativeFunc
 	opts    Options
 }
 
 // NewBuilder creates a builder from embedded YAML data.
-func NewBuilder(data []byte) *AppBuilder {
-	return &AppBuilder{data: data, natives: make(map[string]NativeFunc)}
+func NewBuilder(name string, data []byte) *AppBuilder {
+	return &AppBuilder{name: name, data: data, natives: make(map[string]NativeFunc)}
 }
 
 // NewBuilderFromPath creates a builder from a file path.
-func NewBuilderFromPath(path string) *AppBuilder {
-	return &AppBuilder{path: path, natives: make(map[string]NativeFunc)}
+func NewBuilderFromPath(name, path string) *AppBuilder {
+	return &AppBuilder{name: name, path: path, natives: make(map[string]NativeFunc)}
 }
 
-// WithName sets the application name used in help output.
-func (b *AppBuilder) WithName(name string) *AppBuilder {
-	b.name = name
-	return b
-}
-
-// WithNative registers a native handler for a command name.
-func (b *AppBuilder) WithNative(name string, fn NativeFunc) *AppBuilder {
+// RegisterNative registers a native handler for a command name.
+func (b *AppBuilder) RegisterNative(name string, fn NativeFunc) *AppBuilder {
 	b.natives[name] = fn
 	return b
 }

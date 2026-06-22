@@ -59,9 +59,9 @@ func main() {
 }
 ```
 
-### With `//go:embed` (concise wrapper)
+### With `//go:embed` (fluent builder)
 
-For the shortest possible boilerplate, use `engine.NewApp`:
+The recommended way is `AppBuilder` — it bundles config, app name, and native handlers in one chain:
 
 ```go
 package main
@@ -80,23 +80,25 @@ import (
 var lotaYAML []byte
 
 func main() {
-    app, err := engine.NewApp(lotaYAML, engine.Options{})
+    app, err := engine.NewBuilder(lotaYAML).
+        WithName("myapp").
+        WithNative("deploy", deployHandler).
+        WithNative("status", statusHandler).
+        Build()
     if err != nil {
         fmt.Fprintf(os.Stderr, "config: %v\n", err)
         os.Exit(1)
     }
 
-    engine.RegisterNative("deploy", deployHandler)
-
     if len(os.Args) < 2 {
-        app.PrintHelp("myapp")
+        app.PrintHelp()
         return
     }
 
     if err := app.Run(context.Background(), os.Args[1:]); err != nil {
         var groupErr *engine.GroupError
         if errors.As(err, &groupErr) {
-            app.PrintGroupHelp(groupErr.Groups, "myapp")
+            app.PrintGroupHelp(groupErr.Groups)
             return
         }
         fmt.Fprintf(os.Stderr, "run: %v\n", err)
@@ -105,7 +107,9 @@ func main() {
 }
 ```
 
-`NewApp` sets `Stdout`/`Stderr` defaults automatically and keeps the config alive in a single struct.
+`WithName` sets the app name for help output. `WithNative` registers Go handlers. `Build` parses the config and sets `Stdout`/`Stderr` defaults. No more passing `"myapp"` to every help call.
+
+For simpler cases, `engine.NewApp(data, Options{})` still works.
 
 ### Loading from a file path
 
@@ -256,9 +260,36 @@ type GroupError struct {
 }
 ```
 
+### `engine.NewBuilder(data []byte) *AppBuilder`
+
+Fluent builder for constructing an `App`. Chain `WithName`, `WithNative`, optionally `WithOptions`, then call `Build()`:
+
+```go
+app, err := engine.NewBuilder(lotaYAML).
+    WithName("myapp").
+    WithNative("deploy", deployHandler).
+    Build()
+```
+
+### `engine.NewBuilderFromPath(path string) *AppBuilder`
+
+Same as `NewBuilder`, but loads config from a file path.
+
+### `(*AppBuilder) WithName(name string) *AppBuilder`
+
+Sets the application name used in help output.
+
+### `(*AppBuilder) WithNative(name string, fn NativeFunc) *AppBuilder`
+
+Registers a native Go handler for a command name. Can be called multiple times.
+
+### `(*AppBuilder) Build() (*App, error)`
+
+Parses config, registers all natives, sets default writers, and returns the `*App`.
+
 ### `engine.NewApp(data []byte, opts Options) (*App, error)`
 
-Concise wrapper that parses config, sets default writers, and returns a bundled `*App`. Use `app.Run`, `app.PrintHelp`, and `app.PrintGroupHelp` instead of managing the config pointer yourself.
+Low-level wrapper when you don't need the builder. Use `NewBuilder` for most cases.
 
 ### `engine.NewAppFromPath(path string, opts Options) (*App, error)`
 

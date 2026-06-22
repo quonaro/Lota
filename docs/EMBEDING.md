@@ -59,9 +59,9 @@ func main() {
 }
 ```
 
-### With `//go:embed` (fluent builder)
+### With `//go:embed` (class-like builder)
 
-The recommended way is `AppBuilder` — it bundles config, app name, and native handlers in one chain:
+The recommended way is `AppBuilder` — create it with a name and config, register natives, then build:
 
 ```go
 package main
@@ -80,11 +80,11 @@ import (
 var lotaYAML []byte
 
 func main() {
-    app, err := engine.NewBuilder(lotaYAML).
-        WithName("myapp").
-        WithNative("deploy", deployHandler).
-        WithNative("status", statusHandler).
-        Build()
+    builder := engine.NewBuilder("myapp", lotaYAML)
+    builder.RegisterNative("deploy", deployHandler)
+    builder.RegisterNative("status", statusHandler)
+
+    app, err := builder.Build()
     if err != nil {
         fmt.Fprintf(os.Stderr, "config: %v\n", err)
         os.Exit(1)
@@ -107,7 +107,7 @@ func main() {
 }
 ```
 
-`WithName` sets the app name for help output. `WithNative` registers Go handlers. `Build` parses the config and sets `Stdout`/`Stderr` defaults. No more passing `"myapp"` to every help call.
+`NewBuilder` takes the app name and YAML data. `RegisterNative` adds Go handlers. `Build` parses config, sets defaults, and returns the `*App`. No more passing `"myapp"` to every help call.
 
 For simpler cases, `engine.NewApp(data, Options{})` still works.
 
@@ -260,26 +260,21 @@ type GroupError struct {
 }
 ```
 
-### `engine.NewBuilder(data []byte) *AppBuilder`
+### `engine.NewBuilder(name string, data []byte) *AppBuilder`
 
-Fluent builder for constructing an `App`. Chain `WithName`, `WithNative`, optionally `WithOptions`, then call `Build()`:
+Class-like builder for constructing an `App`. Pass the app name and YAML data, then register natives and call `Build()`:
 
 ```go
-app, err := engine.NewBuilder(lotaYAML).
-    WithName("myapp").
-    WithNative("deploy", deployHandler).
-    Build()
+builder := engine.NewBuilder("myapp", lotaYAML)
+builder.RegisterNative("deploy", deployHandler)
+app, err := builder.Build()
 ```
 
-### `engine.NewBuilderFromPath(path string) *AppBuilder`
+### `engine.NewBuilderFromPath(name, path string) *AppBuilder`
 
 Same as `NewBuilder`, but loads config from a file path.
 
-### `(*AppBuilder) WithName(name string) *AppBuilder`
-
-Sets the application name used in help output.
-
-### `(*AppBuilder) WithNative(name string, fn NativeFunc) *AppBuilder`
+### `(*AppBuilder) RegisterNative(name string, fn NativeFunc) *AppBuilder`
 
 Registers a native Go handler for a command name. Can be called multiple times.
 

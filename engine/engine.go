@@ -88,6 +88,18 @@ func LoadConfigFromPath(path string) (*config.AppConfig, string, error) {
 	return cfg, filepath.Dir(fc.Path), nil
 }
 
+// GroupError is returned by Run when the resolved path points to a group
+// rather than a command. The caller can use errors.As to detect it and
+// print group help or take any other action.
+type GroupError struct {
+	Path   string
+	Groups []*config.Group
+}
+
+func (e *GroupError) Error() string {
+	return fmt.Sprintf("%q is a group, not a command", e.Path)
+}
+
 // Run is the CLI-style entrypoint. args contains the full command line,
 // for example []string{"deploy", "prod", "--force"}.
 func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options) error {
@@ -100,7 +112,10 @@ func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options
 		return fmt.Errorf("command not found: %s", args[0])
 	}
 	if result.Command == nil {
-		return fmt.Errorf("%q is a group, not a command", strings.Join(args, " "))
+		return &GroupError{
+			Path:   strings.Join(args, " "),
+			Groups: result.Groups,
+		}
 	}
 
 	return runCommand(ctx, cfg, result, remainingArgs, opts)
@@ -352,6 +367,44 @@ func PrintHelp(cfg *config.AppConfig, w io.Writer, appName string) {
 		_, _ = fmt.Fprintf(w, "  %-20s %s\n", group.Name, group.Desc)
 	}
 	for _, cmd := range cfg.Commands {
+		_, _ = fmt.Fprintf(w, "  %-20s %s\n", cmd.Name, cmd.Desc)
+	}
+	_, _ = fmt.Fprintln(w)
+}
+
+// PrintGroupHelp writes the commands and sub-groups inside a specific group to w.
+// groups is the chain of groups from outermost to innermost (as returned by
+// config.ResolveCommand). If groups is empty, it falls back to PrintHelp.
+func PrintGroupHelp(cfg *config.AppConfig, groups []*config.Group, w io.Writer, appName string) {
+	if len(groups) == 0 {
+		PrintHelp(cfg, w, appName)
+		return
+	}
+
+	group := groups[len(groups)-1]
+
+	if appName == "" {
+		appName = "app"
+	}
+
+	pathParts := make([]string, 0, len(groups))
+	for _, g := range groups {
+		pathParts = append(pathParts, g.Name)
+	}
+	path := strings.Join(pathParts, " ")
+
+	_, _ = fmt.Fprintf(w, "Usage: %s %s <command> [args...]\n\n", appName, path)
+
+	if group.Desc != "" {
+		_, _ = fmt.Fprintf(w, "%s\n\n", group.Desc)
+	}
+
+	_, _ = fmt.Fprintln(w, "Commands:")
+
+	for _, sub := range group.Groups {
+		_, _ = fmt.Fprintf(w, "  %-20s %s\n", sub.Name, sub.Desc)
+	}
+	for _, cmd := range group.Commands {
 		_, _ = fmt.Fprintf(w, "  %-20s %s\n", cmd.Name, cmd.Desc)
 	}
 	_, _ = fmt.Fprintln(w)

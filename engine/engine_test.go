@@ -296,3 +296,95 @@ func TestPrintHelpEmpty(t *testing.T) {
 		t.Errorf("expected default app name, got: %q", out)
 	}
 }
+
+func TestRun_GroupError(t *testing.T) {
+	cfg := &config.AppConfig{
+		Groups: []config.Group{
+			{
+				Name: "admin",
+				Desc: "Administration tools",
+				Commands: []config.Command{
+					{Name: "users", Script: "echo users"},
+				},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	err := Run(context.Background(), cfg, []string{"admin"}, Options{})
+	if err == nil {
+		t.Fatal("expected error for group, got nil")
+	}
+
+	var groupErr *GroupError
+	if !errors.As(err, &groupErr) {
+		t.Fatalf("expected *GroupError, got %T: %v", err, err)
+	}
+	if groupErr.Path != "admin" {
+		t.Errorf("expected Path='admin', got %q", groupErr.Path)
+	}
+	if len(groupErr.Groups) != 1 || groupErr.Groups[0].Name != "admin" {
+		t.Errorf("expected Groups=[admin], got %v", groupErr.Groups)
+	}
+}
+
+func TestPrintGroupHelp(t *testing.T) {
+	cfg := &config.AppConfig{
+		Groups: []config.Group{
+			{
+				Name: "admin",
+				Desc: "Administration tools",
+				Commands: []config.Command{
+					{Name: "users", Desc: "Manage users"},
+				},
+				Groups: []config.Group{
+					{Name: "db", Desc: "Database tools"},
+				},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	groups := []*config.Group{&cfg.Groups[0]}
+	PrintGroupHelp(cfg, groups, &buf, "outless")
+
+	out := buf.String()
+	if !strings.Contains(out, "Usage: outless admin") {
+		t.Errorf("expected usage header, got: %q", out)
+	}
+	if !strings.Contains(out, "Administration tools") {
+		t.Errorf("expected group desc, got: %q", out)
+	}
+	if !strings.Contains(out, "users") {
+		t.Errorf("expected command 'users', got: %q", out)
+	}
+	if !strings.Contains(out, "db") {
+		t.Errorf("expected sub-group 'db', got: %q", out)
+	}
+	// Must NOT contain CLI-specific global flags
+	if strings.Contains(out, "--init") {
+		t.Errorf("help should not contain --init in embedded mode, got: %q", out)
+	}
+}
+
+func TestPrintGroupHelpFallback(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "build", Desc: "Build the project"},
+		},
+	}
+	var buf bytes.Buffer
+	PrintGroupHelp(cfg, nil, &buf, "myapp")
+	out := buf.String()
+	if !strings.Contains(out, "Usage: myapp") {
+		t.Errorf("expected fallback to PrintHelp, got: %q", out)
+	}
+	if !strings.Contains(out, "build") {
+		t.Errorf("expected command 'build', got: %q", out)
+	}
+}

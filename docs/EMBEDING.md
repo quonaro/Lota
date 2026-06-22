@@ -149,6 +149,31 @@ engine.PrintHelp(cfg, os.Stdout, "myapp")
 //   test                 Run the test suite
 ```
 
+### Handling groups
+
+If the user passes a group name instead of a command (e.g., `./outless admin`), `engine.Run` returns a `*engine.GroupError`. You can detect it with `errors.As` and show group-specific help:
+
+```go
+err := engine.Run(ctx, cfg, os.Args[1:], opts)
+var groupErr *engine.GroupError
+if errors.As(err, &groupErr) {
+    engine.PrintGroupHelp(cfg, groupErr.Groups, os.Stdout, "myapp")
+    return nil
+}
+```
+
+`PrintGroupHelp` lists the commands and sub-groups inside the target group:
+
+```
+Usage: myapp admin <command> [args...]
+
+Administration tools
+
+Commands:
+  users                Manage users
+  db                   Database tools
+```
+
 ## API Reference
 
 ### `engine.Options`
@@ -196,6 +221,21 @@ Reads a config file from the given path, parses it, builds indexes, validates it
 ### `engine.PrintHelp(cfg *config.AppConfig, w io.Writer, appName string)`
 
 Writes a list of available top-level commands and groups to `w`. Unlike `cli.PrintHelp`, it does not print global CLI flags (`--init`, `--completion-script`, etc.) because those are irrelevant when Lota is embedded.
+
+### `engine.PrintGroupHelp(cfg *config.AppConfig, groups []*config.Group, w io.Writer, appName string)`
+
+Writes the commands and sub-groups inside a specific group to `w`. `groups` is the chain from outermost to innermost (as returned by `config.ResolveCommand` or `engine.GroupError.Groups`). If `groups` is empty, it falls back to `PrintHelp`.
+
+### `engine.GroupError`
+
+Returned by `engine.Run` when the resolved path points to a group rather than a command. Use `errors.As` to detect it and access `Path` and `Groups` for displaying help.
+
+```go
+type GroupError struct {
+    Path   string
+    Groups []*config.Group
+}
+```
 
 ## Comparison with `cli.Run`
 

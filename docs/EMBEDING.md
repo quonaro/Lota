@@ -95,6 +95,60 @@ func main() {
 }
 ```
 
+### Loading from a file path
+
+If your config lives at a known path (e.g. shipped next to the binary or inside an `embed.FS` extracted to a temp directory), use `LoadConfigFromPath`. It returns both the parsed config and its directory, which is useful for `engine.Options.ConfigDir`:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "lota/engine"
+)
+
+func main() {
+    ctx := context.Background()
+
+    cfg, configDir, err := engine.LoadConfigFromPath("/etc/myapp/tasks.yml")
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "config: %v\n", err)
+        os.Exit(1)
+    }
+
+    if len(os.Args) < 2 {
+        engine.PrintHelp(cfg, os.Stdout, "myapp")
+        return
+    }
+
+    if err := engine.Run(ctx, cfg, os.Args[1:], engine.Options{
+        ConfigDir: configDir,
+        Stdout:    os.Stdout,
+        Stderr:    os.Stderr,
+    }); err != nil {
+        fmt.Fprintf(os.Stderr, "run: %v\n", err)
+        os.Exit(1)
+    }
+}
+```
+
+### Embedded help
+
+When Lota is embedded, global CLI flags such as `--init` or `--completion-script` do not exist. Use `engine.PrintHelp` to show only the commands and groups defined in the configuration:
+
+```go
+engine.PrintHelp(cfg, os.Stdout, "myapp")
+// Output:
+// Usage: myapp <command> [args...]
+//
+// Commands:
+//   deploy               Deploy the application
+//   test                 Run the test suite
+```
+
 ## API Reference
 
 ### `engine.Options`
@@ -135,6 +189,14 @@ CLI-style entrypoint. `args` is the full command line (e.g., `[]string{"deploy",
 
 Programmatic entrypoint. `path` is a dot-separated command path (e.g., `"deploy.prod"`). `cmdArgs` are the command-specific arguments after the path is resolved.
 
+### `engine.LoadConfigFromPath(path string) (*config.AppConfig, string, error)`
+
+Reads a config file from the given path, parses it, builds indexes, validates it, and returns both the config and its parent directory. The directory is useful for `engine.Options.ConfigDir` when resolving relative paths (e.g., log files or `$CWD`).
+
+### `engine.PrintHelp(cfg *config.AppConfig, w io.Writer, appName string)`
+
+Writes a list of available top-level commands and groups to `w`. Unlike `cli.PrintHelp`, it does not print global CLI flags (`--init`, `--completion-script`, etc.) because those are irrelevant when Lota is embedded.
+
 ## Comparison with `cli.Run`
 
 |                 | `cli.Run(ctx)`                | `engine.Run(ctx, cfg, args, opts)` |
@@ -143,7 +205,7 @@ Programmatic entrypoint. `path` is a dot-separated command path (e.g., `"deploy.
 | `os.Exit`       | Uses `os.Exit` for completion | Never calls `os.Exit`              |
 | Output          | Hardcoded `os.Stdout/Stderr`  | Configurable `io.Writer`           |
 | Config source   | Filesystem only               | Can use `[]byte` / `io.Reader`     |
-| Help/Completion | Built-in                      | Not included; you build your own   |
+| Help/Completion | Built-in                      | `engine.PrintHelp` (no CLI flags)  |
 | Use case        | Standalone binary             | Embedded library                   |
 
 ## Advanced: Custom prefix formatter

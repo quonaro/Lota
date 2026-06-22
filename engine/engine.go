@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,6 +63,29 @@ func LoadConfig(data []byte) (*config.AppConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// LoadConfigFromPath reads a config file from the given path, parses it,
+// builds indexes, validates it, and returns both the config and its directory.
+// The returned directory can be used as engine.Options.ConfigDir.
+func LoadConfigFromPath(path string) (*config.AppConfig, string, error) {
+	fc, err := config.GetConfigPath(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve config path: %w", err)
+	}
+
+	cfg, err := config.ParseConfigWithWriter(fc.Path, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse config: %w", err)
+	}
+
+	validator := config.GetValidator(cfg, fc.Path)
+	result := validator.Validate()
+	if result.Error != nil {
+		return nil, "", result.Error
+	}
+
+	return cfg, filepath.Dir(fc.Path), nil
 }
 
 // Run is the CLI-style entrypoint. args contains the full command line,
@@ -311,4 +335,24 @@ func resolveDependencyLevels(cfg *config.AppConfig, result config.SearchResult) 
 	}
 
 	return resultLevels, nil
+}
+
+// PrintHelp writes a list of available top-level commands and groups to w.
+// Unlike cli.PrintHelp, it does not print global CLI flags (--init,
+// --completion-script, etc.) because those are irrelevant when Lota is
+// embedded into another application.
+func PrintHelp(cfg *config.AppConfig, w io.Writer, appName string) {
+	if appName == "" {
+		appName = "app"
+	}
+	_, _ = fmt.Fprintf(w, "Usage: %s <command> [args...]\n\n", appName)
+	_, _ = fmt.Fprintln(w, "Commands:")
+
+	for _, group := range cfg.Groups {
+		_, _ = fmt.Fprintf(w, "  %-20s %s\n", group.Name, group.Desc)
+	}
+	for _, cmd := range cfg.Commands {
+		_, _ = fmt.Fprintf(w, "  %-20s %s\n", cmd.Name, cmd.Desc)
+	}
+	_, _ = fmt.Fprintln(w)
 }

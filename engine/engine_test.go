@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/quonaro/lota/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quonaro/lota/config"
 )
 
 func contains(slice []string, item string) bool {
@@ -219,5 +220,79 @@ func TestLoadConfigInvalid(t *testing.T) {
 	data := []byte(`not valid yaml: [`)
 	if _, err := LoadConfig(data); err == nil {
 		t.Fatal("expected error for invalid YAML")
+	}
+}
+
+func TestLoadConfigFromPath(t *testing.T) {
+	yamlContent := `
+build:
+  desc: Build the project
+  script: echo build
+`
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, configDir, err := LoadConfigFromPath(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error: %v", err)
+	}
+	if len(cfg.Commands) != 1 || cfg.Commands[0].Name != "build" {
+		t.Fatalf("expected command 'build', got %v", cfg.Commands)
+	}
+	if configDir != tmpDir {
+		t.Fatalf("expected configDir %q, got %q", tmpDir, configDir)
+	}
+}
+
+func TestLoadConfigFromPathNotFound(t *testing.T) {
+	_, _, err := LoadConfigFromPath("/nonexistent/path/lota.yml")
+	if err == nil {
+		t.Fatal("expected error for missing config file")
+	}
+}
+
+func TestPrintHelp(t *testing.T) {
+	cfg := &config.AppConfig{
+		Groups: []config.Group{
+			{Name: "dev", Desc: "Development tasks"},
+		},
+		Commands: []config.Command{
+			{Name: "build", Desc: "Build the project"},
+			{Name: "test", Desc: "Run tests"},
+		},
+	}
+
+	var buf bytes.Buffer
+	PrintHelp(cfg, &buf, "myapp")
+
+	out := buf.String()
+	if !strings.Contains(out, "Usage: myapp") {
+		t.Errorf("expected usage header, got: %q", out)
+	}
+	if !strings.Contains(out, "build") {
+		t.Errorf("expected command 'build', got: %q", out)
+	}
+	if !strings.Contains(out, "dev") {
+		t.Errorf("expected group 'dev', got: %q", out)
+	}
+	// Must NOT contain CLI-specific global flags
+	if strings.Contains(out, "--init") {
+		t.Errorf("help should not contain --init in embedded mode, got: %q", out)
+	}
+	if strings.Contains(out, "--completion-script") {
+		t.Errorf("help should not contain --completion-script in embedded mode, got: %q", out)
+	}
+}
+
+func TestPrintHelpEmpty(t *testing.T) {
+	cfg := &config.AppConfig{}
+	var buf bytes.Buffer
+	PrintHelp(cfg, &buf, "")
+	out := buf.String()
+	if !strings.Contains(out, "Usage: app") {
+		t.Errorf("expected default app name, got: %q", out)
 	}
 }

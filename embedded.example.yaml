@@ -1,0 +1,98 @@
+# Example of an embedded Lota configuration.
+# This file can be named anything (myapp.yml, commands.yaml, etc.)
+# and loaded via engine.NewAppFromPath or embedded with //go:embed.
+
+vars:
+  - "APP_NAME=myapp"
+  - "CONFIG_DIR=./config"
+
+# Top-level groups appear as top-level commands in help.
+# They can be nested recursively.
+admin:
+  desc: Administrative utilities
+  color: cyan
+  inheritColor: true
+
+  vars:
+    - "ADMIN_LOG_LEVEL=info"
+
+  # Sub-groups
+  users:
+    desc: User management
+    color: hicyan
+
+    # Commands inside a group
+    reset-password:
+      desc: Reset a user's password
+      color: yellow
+      native: true
+      args:
+        - "username:str"
+        - "password:str"
+
+  # Commands directly inside the 'admin' group
+  version:
+    desc: Show application version
+    native: true
+
+# Top-level commands (not in any group)
+build:
+  desc: Build the application
+  color: green
+  script: |
+    echo "Building $APP_NAME..."
+    go build -o bin/$APP_NAME .
+
+deploy:
+  desc: Deploy to production
+  color: hired
+  script: |
+    echo "Deploying $APP_NAME..."
+  # Dependencies run before the script
+  depends:
+    - build
+    - test
+
+# Parallel execution (dependencies run concurrently)
+lint:
+  desc: Run all linters
+  color: magenta
+  parallel: true
+  script: |
+    echo "Linting..."
+
+test:
+  desc: Run tests
+  color: blue
+  parallel: true
+  script: |
+    echo "Running tests..."
+
+# Example of a native-only command with arguments and variables
+server:
+  desc: Start the HTTP server
+  color: higreen
+  native: true
+  args:
+    - "port:int"
+    - "host:str"
+  vars:
+    - "DEFAULT_PORT=8080"
+    - "DEFAULT_HOST=0.0.0.0"
+
+# Commands can use custom working directories and shells
+migrate:
+  desc: Run database migrations
+  script: |
+    echo "Running migrations..."
+  dir: ./migrations
+  shell: bash
+
+# Log configuration (applies to this command)
+backup:
+  desc: Backup the database
+  script: |
+    echo "Backing up..."
+  log:
+    path: ./logs/backup.log
+    truncate: true

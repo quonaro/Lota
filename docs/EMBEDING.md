@@ -16,6 +16,8 @@ Install Lota as a module dependency:
 go get github.com/quonaro/lota
 ```
 
+For a full-featured example of everything supported in embedded mode (native commands, groups, colors, variables, arguments, and more), see [`embedded.example.yaml`](../embedded.example.yaml) in the repository root.
+
 ### Minimal example
 
 ```go

@@ -24,6 +24,7 @@ type Options struct {
 	Stdout          io.Writer
 	Stderr          io.Writer
 	PrefixFormatter func(path string, cmd *config.Command, groups []*config.Group) string
+	NativeHandlers  map[string]NativeFunc // map of full command path to handler
 }
 
 func (o Options) formatPrefix(path string, cmd *config.Command, groups []*config.Group) string {
@@ -218,12 +219,13 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
 	if result.Command.Native {
-		if err := runNative(ctx, result.Command.Name, NativeContext{
+		cmdPath := config.CommandPath(result.Command, result.Groups)
+		if err := runNative(ctx, cmdPath, NativeContext{
 			Vars:   vars,
 			Args:   parsedArgs,
 			Stdout: runOpts.Stdout,
 			Stderr: runOpts.Stderr,
-		}); err != nil {
+		}, opts.NativeHandlers); err != nil {
 			return err
 		}
 	} else {
@@ -261,12 +263,13 @@ func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result con
 		if prefix != "" {
 			_, _ = fmt.Fprintf(runOpts.Stdout, "%s ", prefix)
 		}
-		return runNative(ctx, result.Command.Name, NativeContext{
+		cmdPath := config.CommandPath(result.Command, result.Groups)
+		return runNative(ctx, cmdPath, NativeContext{
 			Vars:   vars,
 			Args:   parsedArgs,
 			Stdout: runOpts.Stdout,
 			Stderr: runOpts.Stderr,
-		})
+		}, opts.NativeHandlers)
 	}
 
 	if prefix != "" {

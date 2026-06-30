@@ -82,7 +82,7 @@ var lotaYAML []byte
 func main() {
     builder := engine.NewBuilder("myapp", lotaYAML)
     builder.RegisterNative("deploy", deployHandler)
-    builder.RegisterNative("status", statusHandler)
+    builder.RegisterNative("infra.status", statusHandler)
 
     app, err := builder.Build()
     if err != nil {
@@ -107,9 +107,18 @@ func main() {
 }
 ```
 
-`NewBuilder` takes the app name and YAML data. `RegisterNative` adds Go handlers. `Build` parses config, sets defaults, and returns the `*App`. No more passing `"myapp"` to every help call.
+`NewBuilder` takes the app name and YAML data. `RegisterNative` adds Go handlers bound to that `App` only. The name passed to `RegisterNative` must be the full command path (`"deploy"` for root commands, `"infra.status"` for commands inside groups). `Build` parses config, sets defaults, validates uniqueness, and returns the `*App`. No more passing `"myapp"` to every help call.
 
-For simpler cases, `engine.NewApp(data, Options{})` still works.
+For simpler cases, `engine.NewApp(data, Options{})` still works. To use native commands without the builder, pass handlers via `Options.NativeHandlers`:
+
+```go
+app, err := engine.NewApp(data, engine.Options{
+    NativeHandlers: map[string]engine.NativeFunc{
+        "deploy": deployHandler,
+        "admin.users.reset-password": resetPasswordHandler,
+    },
+})
+```
 
 ### Loading from a file path
 
@@ -211,6 +220,7 @@ type Options struct {
     Stdout          io.Writer
     Stderr          io.Writer
     PrefixFormatter func(path string, cmd *config.Command, groups []*config.Group) string
+    NativeHandlers  map[string]NativeFunc // full command path -> handler
 }
 ```
 
@@ -224,6 +234,7 @@ type Options struct {
 | `Stdout`          | Where command output is written. Defaults to `os.Stdout` if nil.       |
 | `Stderr`          | Where errors and warnings are written. Defaults to `os.Stderr` if nil. |
 | `PrefixFormatter` | Optional formatter for dependency output prefixes.                     |
+| `NativeHandlers`  | Map of full command path to native handler. Used by `engine.Run`.      |
 
 ### `engine.LoadConfig(data []byte) (*config.AppConfig, error)`
 
@@ -276,7 +287,7 @@ Same as `NewBuilder`, but loads config from a file path.
 
 ### `(*AppBuilder) RegisterNative(name string, fn NativeFunc) *AppBuilder`
 
-Registers a native Go handler for a command name. Can be called multiple times.
+Registers a native Go handler for a command path. For root commands use the command name (`"deploy"`). For commands inside groups use the dot-separated path (`"infra.status"`). Can be called multiple times. Handlers are scoped to the `App` built from this builder, not global.
 
 ### `(*AppBuilder) Build() (*App, error)`
 
@@ -353,7 +364,9 @@ The `native: true` marker tells Lota to look up a registered Go handler instead 
 ### Registering a handler
 
 ```go
-engine.RegisterNative("deploy", func(ctx context.Context, nctx engine.NativeContext) error {
+builder := engine.NewBuilder("myapp", lotaYAML)
+
+builder.RegisterNative("deploy", func(ctx context.Context, nctx engine.NativeContext) error {
     env := nctx.Args["env"]       // "dev" or "prod"
     region := nctx.Vars["REGION"] // "eu-west-1"
 
@@ -361,6 +374,14 @@ engine.RegisterNative("deploy", func(ctx context.Context, nctx engine.NativeCont
     // Any Go code: HTTP requests, database calls, etc.
     return nil
 })
+
+app, err := builder.Build()
+```
+
+For commands inside groups use the full dot-separated path:
+
+```go
+builder.RegisterNative("infra.status", statusHandler)
 ```
 
 ### `engine.NativeContext`
@@ -389,7 +410,7 @@ If a command is marked `native: true` but no handler was registered, `engine.Run
 native command "deploy" has no registered handler
 ```
 
-Register handlers before calling `engine.Run`. The registry is global and safe for concurrent use.
+Register handlers on the `AppBuilder` before calling `Build()`, or pass them via `Options.NativeHandlers` when using `engine.Run` directly. The registry is per-app, not global.
 
 ### Native commands as dependencies
 
@@ -406,7 +427,7 @@ test:
 ```
 
 ```go
-engine.RegisterNative("build", func(ctx context.Context, nctx engine.NativeContext) error {
+builder.RegisterNative("build", func(ctx context.Context, nctx engine.NativeContext) error {
     // Run Go build
     return nil
 })

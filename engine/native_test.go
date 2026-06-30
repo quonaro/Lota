@@ -11,28 +11,26 @@ import (
 	"github.com/quonaro/lota/config"
 )
 
-func TestRegisterNative(t *testing.T) {
-	RegisterNative("test-hello", func(ctx context.Context, nctx NativeContext) error {
-		_, _ = fmt.Fprintln(nctx.Stdout, "hello from native")
-		return nil
-	})
-	defer unregisterNative("test-hello")
-
-	cfg := &config.AppConfig{
-		Commands: []config.Command{
-			{Name: "test-hello", Native: true, Script: "echo ignored"},
-		},
-	}
-	if err := cfg.BuildIndexes(); err != nil {
-		t.Fatalf("BuildIndexes() error: %v", err)
-	}
-
+func TestNativeHandler(t *testing.T) {
 	var stdout bytes.Buffer
-	err := Run(context.Background(), cfg, []string{"test-hello"}, Options{
-		Stdout: &stdout,
-		Stderr: &stdout,
-	})
+	app, err := NewBuilder("myapp", []byte(`
+test-hello:
+  desc: Say hello
+  native: true
+  script: echo ignored
+`)).
+		RegisterNative("test-hello", func(ctx context.Context, nctx NativeContext) error {
+			_, _ = fmt.Fprintln(nctx.Stdout, "hello from native")
+			return nil
+		}).
+		Build()
 	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	app.opts.Stdout = &stdout
+	app.opts.Stderr = &stdout
+
+	if err := app.Run(context.Background(), []string{"test-hello"}); err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "hello from native") {
@@ -41,16 +39,16 @@ func TestRegisterNative(t *testing.T) {
 }
 
 func TestNativeMissingHandler(t *testing.T) {
-	cfg := &config.AppConfig{
-		Commands: []config.Command{
-			{Name: "unregistered", Native: true},
-		},
-	}
-	if err := cfg.BuildIndexes(); err != nil {
-		t.Fatalf("BuildIndexes() error: %v", err)
+	app, err := NewBuilder("myapp", []byte(`
+unregistered:
+  desc: Unregistered native
+  native: true
+`)).Build()
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
 	}
 
-	err := Run(context.Background(), cfg, []string{"unregistered"}, Options{})
+	err = app.Run(context.Background(), []string{"unregistered"})
 	if err == nil {
 		t.Fatal("expected error for unregistered native command")
 	}
@@ -62,14 +60,6 @@ func TestNativeMissingHandler(t *testing.T) {
 func TestNativeReceivesVarsAndArgs(t *testing.T) {
 	var gotVars map[string]string
 	var gotArgs map[string]string
-
-	RegisterNative("native-check", func(ctx context.Context, nctx NativeContext) error {
-		gotVars = nctx.Vars
-		gotArgs = nctx.Args
-		_, _ = fmt.Fprintf(nctx.Stdout, "env=%s port=%s", nctx.Vars["ENV"], nctx.Args["port"])
-		return nil
-	})
-	defer unregisterNative("native-check")
 
 	cmd := config.Command{
 		Name:    "native-check",
@@ -91,11 +81,17 @@ func TestNativeReceivesVarsAndArgs(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	err := Run(context.Background(), cfg, []string{"native-check"}, Options{
-		Stdout: &stdout,
-		Stderr: &stdout,
-	})
-	if err != nil {
+	app := &App{
+		cfg: cfg,
+		opts: Options{
+			Stdout:         &stdout,
+			Stderr:         &stdout,
+			NativeHandlers: map[string]NativeFunc{"native-check": nativeCheckHandler(&gotVars, &gotArgs)},
+		},
+		natives: map[string]NativeFunc{},
+	}
+
+	if err := app.Run(context.Background(), []string{"native-check"}); err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
 
@@ -116,22 +112,30 @@ func TestNativeReceivesVarsAndArgs(t *testing.T) {
 	}
 }
 
+func nativeCheckHandler(gotVars *map[string]string, gotArgs *map[string]string) NativeFunc {
+	return func(ctx context.Context, nctx NativeContext) error {
+		*gotVars = nctx.Vars
+		*gotArgs = nctx.Args
+		_, _ = fmt.Fprintf(nctx.Stdout, "env=%s port=%s", nctx.Vars["ENV"], nctx.Args["port"])
+		return nil
+	}
+}
+
 func TestNativeReturnsError(t *testing.T) {
-	RegisterNative("native-fail", func(ctx context.Context, nctx NativeContext) error {
-		return errors.New("native failure")
-	})
-	defer unregisterNative("native-fail")
-
-	cfg := &config.AppConfig{
-		Commands: []config.Command{
-			{Name: "native-fail", Native: true},
-		},
+	app, err := NewBuilder("myapp", []byte(`
+native-fail:
+  desc: Failing native
+  native: true
+`)).
+		RegisterNative("native-fail", func(ctx context.Context, nctx NativeContext) error {
+			return errors.New("native failure")
+		}).
+		Build()
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
 	}
-	if err := cfg.BuildIndexes(); err != nil {
-		t.Fatalf("BuildIndexes() error: %v", err)
-	}
 
-	err := Run(context.Background(), cfg, []string{"native-fail"}, Options{})
+	err = app.Run(context.Background(), []string{"native-fail"})
 	if err == nil {
 		t.Fatal("expected error from native command")
 	}
@@ -141,28 +145,30 @@ func TestNativeReturnsError(t *testing.T) {
 }
 
 func TestNativeAsDependency(t *testing.T) {
-	RegisterNative("native-dep", func(ctx context.Context, nctx NativeContext) error {
-		_, _ = fmt.Fprintln(nctx.Stdout, "native-dep-ran")
-		return nil
-	})
-	defer unregisterNative("native-dep")
-
-	cfg := &config.AppConfig{
-		Commands: []config.Command{
-			{Name: "native-dep", Native: true},
-			{Name: "shell-cmd", Script: "echo hello", Depends: []string{"native-dep"}},
-		},
-	}
-	if err := cfg.BuildIndexes(); err != nil {
-		t.Fatalf("BuildIndexes() error: %v", err)
-	}
-
 	var stdout bytes.Buffer
-	err := Run(context.Background(), cfg, []string{"shell-cmd"}, Options{
-		Stdout: &stdout,
-		Stderr: &stdout,
-	})
+	app, err := NewBuilder("myapp", []byte(`
+native-dep:
+  desc: Native dependency
+  native: true
+
+shell-cmd:
+  desc: Shell command
+  script: echo hello
+  depends:
+    - native-dep
+`)).
+		RegisterNative("native-dep", func(ctx context.Context, nctx NativeContext) error {
+			_, _ = fmt.Fprintln(nctx.Stdout, "native-dep-ran")
+			return nil
+		}).
+		Build()
 	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	app.opts.Stdout = &stdout
+	app.opts.Stderr = &stdout
+
+	if err := app.Run(context.Background(), []string{"shell-cmd"}); err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "native-dep-ran") {
@@ -171,35 +177,54 @@ func TestNativeAsDependency(t *testing.T) {
 }
 
 func TestNativeCommandPath(t *testing.T) {
-	RegisterNative("group-native", func(ctx context.Context, nctx NativeContext) error {
-		_, _ = fmt.Fprintln(nctx.Stdout, "group-native-ran")
-		return nil
-	})
-	defer unregisterNative("group-native")
-
-	cfg := &config.AppConfig{
-		Groups: []config.Group{
-			{
-				Name: "infra",
-				Commands: []config.Command{
-					{Name: "group-native", Native: true},
-				},
-			},
-		},
-	}
-	if err := cfg.BuildIndexes(); err != nil {
-		t.Fatalf("BuildIndexes() error: %v", err)
-	}
-
 	var stdout bytes.Buffer
-	err := Run(context.Background(), cfg, []string{"infra", "group-native"}, Options{
-		Stdout: &stdout,
-		Stderr: &stdout,
-	})
+	app, err := NewBuilder("myapp", []byte(`
+infra:
+  group-native:
+    desc: Group native
+    native: true
+`)).
+		RegisterNative("infra.group-native", func(ctx context.Context, nctx NativeContext) error {
+			_, _ = fmt.Fprintln(nctx.Stdout, "group-native-ran")
+			return nil
+		}).
+		Build()
 	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	app.opts.Stdout = &stdout
+	app.opts.Stderr = &stdout
+
+	if err := app.Run(context.Background(), []string{"infra", "group-native"}); err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "group-native-ran") {
 		t.Fatalf("expected output, got: %q", stdout.String())
+	}
+}
+
+func TestNativeDuplicateNameRejected(t *testing.T) {
+	_, err := NewBuilder("myapp", []byte(`
+infra:
+  deploy:
+    desc: Infra deploy
+    native: true
+app:
+  deploy:
+    desc: App deploy
+    native: true
+`)).
+		RegisterNative("infra.deploy", func(ctx context.Context, nctx NativeContext) error {
+			return nil
+		}).
+		RegisterNative("app.deploy", func(ctx context.Context, nctx NativeContext) error {
+			return nil
+		}).
+		Build()
+	if err == nil {
+		t.Fatal("expected Build() error for duplicate command names")
+	}
+	if !strings.Contains(err.Error(), "duplicate command name") {
+		t.Fatalf("expected duplicate command name error, got: %v", err)
 	}
 }

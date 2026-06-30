@@ -2,17 +2,17 @@ package runner
 
 import (
 	"fmt"
-	"github.com/quonaro/lota/config"
 	"io"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/quonaro/lota/config"
 )
 
 var placeholderRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
-var dollarVarRegex = regexp.MustCompile(`\$([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)`)
 var assignmentRegex = regexp.MustCompile(`(?m)(^|[;&])\s*(?:export\s+|local\s+|declare\s+|typeset\s+|readonly\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\+?=)`)
 var loopVarRegex = regexp.MustCompile(`(?m)(^|[;{])\s*(?:for|select)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\b`)
 var readCommandRegex = regexp.MustCompile(`\bread(?:\s+-[^\s]+)*((?:\s+[a-zA-Z_][a-zA-Z0-9_]*)+)`)
@@ -151,16 +151,61 @@ func findPlaceholders(script string) []string {
 	return placeholders
 }
 
-// findDollarVars extracts all unique $var patterns from script
+// findDollarVars extracts all unique $var patterns from script.
+// It ignores $var inside single quotes, matching shell behavior.
 func findDollarVars(script string) []string {
-	matches := dollarVarRegex.FindAllStringSubmatch(script, -1)
-
 	seen := make(map[string]bool)
-	vars := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if len(match) > 1 && !seen[match[1]] {
-			seen[match[1]] = true
-			vars = append(vars, match[1])
+	vars := make([]string, 0)
+	inSingleQuote := false
+	inDoubleQuote := false
+	escape := false
+
+	for i := 0; i < len(script); i++ {
+		ch := script[i]
+		if escape {
+			escape = false
+			continue
+		}
+		if ch == '\\' && !inSingleQuote {
+			escape = true
+			continue
+		}
+		if ch == '\'' && !inDoubleQuote {
+			inSingleQuote = !inSingleQuote
+			continue
+		}
+		if ch == '"' && !inSingleQuote {
+			inDoubleQuote = !inDoubleQuote
+			continue
+		}
+		if ch == '$' && !inSingleQuote {
+			if i+1 < len(script) && isShellIdentRune(rune(script[i+1]), true) {
+				start := i + 1
+				end := start + 1
+				for end < len(script) && isShellIdentRune(rune(script[end]), false) {
+					end++
+				}
+				name := script[start:end]
+				// Handle dot notation: $cfg.app_name
+				for end < len(script) && script[end] == '.' {
+					dotStart := end + 1
+					if dotStart < len(script) && isShellIdentRune(rune(script[dotStart]), true) {
+						dotEnd := dotStart + 1
+						for dotEnd < len(script) && isShellIdentRune(rune(script[dotEnd]), false) {
+							dotEnd++
+						}
+						name = name + "." + script[dotStart:dotEnd]
+						end = dotEnd
+					} else {
+						break
+					}
+				}
+				if !seen[name] {
+					seen[name] = true
+					vars = append(vars, name)
+				}
+				i = end - 1
+			}
 		}
 	}
 	return vars

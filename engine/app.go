@@ -9,9 +9,10 @@ import (
 
 // App bundles config, options, and native handlers for a concise embedded API.
 type App struct {
-	cfg  *config.AppConfig
-	opts Options
-	name string
+	cfg     *config.AppConfig
+	opts    Options
+	name    string
+	natives map[string]NativeFunc
 }
 
 // NewApp parses embedded YAML data and returns a ready-to-use App.
@@ -26,7 +27,7 @@ func NewApp(data []byte, opts Options) (*App, error) {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
-	return &App{cfg: cfg, opts: opts}, nil
+	return &App{cfg: cfg, opts: opts, natives: make(map[string]NativeFunc)}, nil
 }
 
 // NewAppFromPath loads a config from a file path and returns a ready-to-use App.
@@ -44,7 +45,7 @@ func NewAppFromPath(path string, opts Options) (*App, error) {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
-	return &App{cfg: cfg, opts: opts}, nil
+	return &App{cfg: cfg, opts: opts, natives: make(map[string]NativeFunc)}, nil
 }
 
 // Config returns the underlying parsed configuration.
@@ -54,7 +55,22 @@ func (a *App) Config() *config.AppConfig {
 
 // Run resolves args against the config and executes the target command.
 func (a *App) Run(ctx context.Context, args []string) error {
-	return Run(ctx, a.cfg, args, a.opts)
+	opts := a.opts
+	if len(a.natives) > 0 {
+		if opts.NativeHandlers == nil {
+			opts.NativeHandlers = a.natives
+		} else {
+			merged := make(map[string]NativeFunc, len(opts.NativeHandlers)+len(a.natives))
+			for k, v := range opts.NativeHandlers {
+				merged[k] = v
+			}
+			for k, v := range a.natives {
+				merged[k] = v
+			}
+			opts.NativeHandlers = merged
+		}
+	}
+	return Run(ctx, a.cfg, args, opts)
 }
 
 // PrintHelp writes top-level help to the configured stdout using the app name.
@@ -87,7 +103,8 @@ func NewBuilderFromPath(name, path string) *AppBuilder {
 	return &AppBuilder{name: name, path: path, natives: make(map[string]NativeFunc)}
 }
 
-// RegisterNative registers a native handler for a command name.
+// RegisterNative registers a native handler for a command path.
+// Root commands use the command name; nested commands use the dot-separated path.
 func (b *AppBuilder) RegisterNative(name string, fn NativeFunc) *AppBuilder {
 	b.natives[name] = fn
 	return b
@@ -99,7 +116,7 @@ func (b *AppBuilder) WithOptions(opts Options) *AppBuilder {
 	return b
 }
 
-// Build parses the config, registers natives, and returns the App.
+// Build parses the config, attaches native handlers, and returns the App.
 func (b *AppBuilder) Build() (*App, error) {
 	var app *App
 	var err error
@@ -112,8 +129,6 @@ func (b *AppBuilder) Build() (*App, error) {
 		return nil, err
 	}
 	app.name = b.name
-	for name, fn := range b.natives {
-		RegisterNative(name, fn)
-	}
+	app.natives = b.natives
 	return app, nil
 }

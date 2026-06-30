@@ -249,6 +249,35 @@ func TestInterpolate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:   "dollar var inside single quotes is ignored",
+			script: "sed -i '$d' ~/.ssh/known_hosts",
+			context: InterpolationContext{
+				Vars: map[string]string{},
+				Args: map[string]string{},
+			},
+			expected: "sed -i '$d' ~/.ssh/known_hosts",
+		},
+		{
+			name:   "dollar var inside double quotes is interpolated",
+			script: `echo "$port"`,
+			context: InterpolationContext{
+				Vars:    map[string]string{},
+				Args:    map[string]string{"port": "8080"},
+				ArgDefs: []config.Arg{{Name: "port", Type: "str"}},
+			},
+			expected: `echo "8080"`,
+		},
+		{
+			name:   "real var interpolated while quoted literal ignored",
+			script: "ssh localhost -p $port 3000 mydomain\nsed -i '$d' ~/.ssh/known_hosts",
+			context: InterpolationContext{
+				Vars:    map[string]string{},
+				Args:    map[string]string{"port": "1024"},
+				ArgDefs: []config.Arg{{Name: "port", Type: "int"}},
+			},
+			expected: "ssh localhost -p 1024 3000 mydomain\nsed -i '$d' ~/.ssh/known_hosts",
+		},
 	}
 
 	for _, tt := range tests {

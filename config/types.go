@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type LogConfig struct {
 	Path        string `yaml:"path"`
@@ -112,7 +115,37 @@ func (c *AppConfig) BuildIndexes() error {
 		}
 		c.groupsMap[c.Groups[i].Name] = &c.Groups[i]
 	}
+
+	if err := c.validateUniqueCommandNames(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (c *AppConfig) validateUniqueCommandNames() error {
+	seen := make(map[string][]string)
+	for i := range c.Commands {
+		seen[c.Commands[i].Name] = append(seen[c.Commands[i].Name], c.Commands[i].Name)
+	}
+	for i := range c.Groups {
+		c.Groups[i].collectCommandNames(c.Groups[i].Name, seen)
+	}
+	for name, paths := range seen {
+		if len(paths) > 1 {
+			return fmt.Errorf("duplicate command name %q at paths %s", name, strings.Join(paths, ", "))
+		}
+	}
+	return nil
+}
+
+func (g *Group) collectCommandNames(groupPath string, seen map[string][]string) {
+	for i := range g.Commands {
+		path := groupPath + "." + g.Commands[i].Name
+		seen[g.Commands[i].Name] = append(seen[g.Commands[i].Name], path)
+	}
+	for i := range g.Groups {
+		g.Groups[i].collectCommandNames(groupPath+"."+g.Groups[i].Name, seen)
+	}
 }
 
 func (g *Group) BuildIndexes() error {

@@ -337,6 +337,30 @@ func ParseConfig(path string) (*AppConfig, error) {
 	return ParseConfigWithWriter(path, os.Stderr)
 }
 
+// tryParseNestedCommandOrGroup attempts to parse a mapping node as a nested command or group.
+// It returns true if the node was successfully parsed as either.
+func (g *Group) tryParseNestedCommandOrGroup(key string, valueNode *yaml.Node, line int) (bool, error) {
+	if valueNode.Kind != yaml.MappingNode {
+		return false, nil
+	}
+	if hasField(valueNode, "script") || hasField(valueNode, "native") {
+		var cmd Command
+		if err := valueNode.Decode(&cmd); err != nil {
+			return false, fmt.Errorf("%d: error parsing command %q in group %q: %w", line, key, g.Name, err)
+		}
+		cmd.Name = key
+		g.Commands = append(g.Commands, cmd)
+		return true, nil
+	}
+	var sub Group
+	if err := valueNode.Decode(&sub); err != nil {
+		return false, fmt.Errorf("%d: error parsing nested group %q in group %q: %w", line, key, g.Name, err)
+	}
+	sub.Name = key
+	g.Groups = append(g.Groups, sub)
+	return true, nil
+}
+
 func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("%d: expected mapping node for group, got %s", node.Line, nodeKindName(node.Kind))
@@ -350,31 +374,73 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 		valueNode := node.Content[i+1]
 		switch key {
 		case "desc":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			g.Desc = valueNode.Value
 		case "dir":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			g.Dir = valueNode.Value
 		case "color":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			g.Color = valueNode.Value
 			if !isValidColor(g.Color) {
 				return fmt.Errorf("%d: invalid color %q for group %q\nAvailable colors: %s", valueNode.Line, g.Color, g.Name, validColorsList())
 			}
 		case "inherit_color":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			var inherit bool
 			if err := valueNode.Decode(&inherit); err != nil {
 				return fmt.Errorf("%d: invalid inherit_color for group %q: %w", valueNode.Line, g.Name, err)
 			}
 			g.InheritColor = &inherit
 		case "show":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			var show bool
 			if err := valueNode.Decode(&show); err != nil {
 				return fmt.Errorf("%d: invalid show value for group %q: %w", valueNode.Line, g.Name, err)
 			}
 			g.Show = &show
 		case "vars":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			if err := valueNode.Decode(&g.Vars); err != nil {
 				return fmt.Errorf("%d: error parsing vars in group %q: %w", valueNode.Line, g.Name, err)
 			}
 		case "args":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			if err := valueNode.Decode(&g.RawArgs); err != nil {
 				return fmt.Errorf("%d: error parsing args in group %q: %w", valueNode.Line, g.Name, err)
 			}
@@ -384,6 +450,14 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 					return fmt.Errorf("%d: invalid arg %q in group %q: %w", valueNode.Line, arg, g.Name, err)
 				}
 			}
+		case "shell":
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			g.Shell = valueNode.Value
 		case "log":
 			logCfg, err := parseLogConfig(valueNode, true, fmt.Sprintf("in group %q", g.Name))
 			if err != nil {
@@ -391,29 +465,26 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 			}
 			g.Log = logCfg
 		default:
-			if hasField(valueNode, "script") || hasField(valueNode, "native") {
-				var cmd Command
-				if err := valueNode.Decode(&cmd); err != nil {
-					return fmt.Errorf("%d: error parsing command %q in group %q: %w", node.Content[i].Line, key, g.Name, err)
+			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
+				if err != nil {
+					return err
 				}
-				cmd.Name = key
-				g.Commands = append(g.Commands, cmd)
-			} else {
-				if valueNode.Kind != yaml.MappingNode {
-					suggestion := suggestField(key, groupFields)
-					if suggestion != "" {
-						return fmt.Errorf("%d: unknown field %q in group %q\nDid you mean: %s?", node.Content[i].Line, key, g.Name, suggestion)
-					}
-					return fmt.Errorf("%d: unknown field %q in group %q (expected mapping for nested group, got %s)",
-						node.Content[i].Line, key, g.Name, nodeKindName(valueNode.Kind))
-				}
-				var sub Group
-				if err := valueNode.Decode(&sub); err != nil {
-					return fmt.Errorf("%d: error parsing nested group %q in group %q: %w", node.Content[i].Line, key, g.Name, err)
-				}
-				sub.Name = key
-				g.Groups = append(g.Groups, sub)
+				continue
 			}
+			if valueNode.Kind != yaml.MappingNode {
+				suggestion := suggestField(key, groupFields)
+				if suggestion != "" {
+					return fmt.Errorf("%d: unknown field %q in group %q\nDid you mean: %s?", node.Content[i].Line, key, g.Name, suggestion)
+				}
+				return fmt.Errorf("%d: unknown field %q in group %q (expected mapping for nested group, got %s)",
+					node.Content[i].Line, key, g.Name, nodeKindName(valueNode.Kind))
+			}
+			var sub Group
+			if err := valueNode.Decode(&sub); err != nil {
+				return fmt.Errorf("%d: error parsing nested group %q in group %q: %w", node.Content[i].Line, key, g.Name, err)
+			}
+			sub.Name = key
+			g.Groups = append(g.Groups, sub)
 		}
 	}
 

@@ -1,8 +1,11 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestBuildIndexesDuplicateCommandAcrossGroups(t *testing.T) {
+func TestBuildIndexesDuplicateCommandAcrossGroupsAllowed(t *testing.T) {
 	cfg := &AppConfig{
 		Commands: []Command{{Name: "deploy"}},
 		Groups: []Group{
@@ -10,37 +13,43 @@ func TestBuildIndexesDuplicateCommandAcrossGroups(t *testing.T) {
 				Name:     "infra",
 				Commands: []Command{{Name: "deploy"}},
 			},
+			{
+				Name:     "app",
+				Commands: []Command{{Name: "deploy"}},
+			},
 		},
 	}
-	err := cfg.BuildIndexes()
-	if err == nil {
-		t.Fatal("expected error for duplicate command name across groups")
-	}
-	if err.Error() != `duplicate command name "deploy" at paths deploy, infra.deploy` {
+	if err := cfg.BuildIndexes(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Find("deploy").Command == nil {
+		t.Fatal("expected top-level deploy command to be found")
+	}
+	if cfg.groupsMap["infra"].Find("deploy").Command == nil {
+		t.Fatal("expected infra.deploy command to be found")
+	}
+	if cfg.groupsMap["app"].Find("deploy").Command == nil {
+		t.Fatal("expected app.deploy command to be found")
 	}
 }
 
-func TestBuildIndexesDuplicateCommandInNestedGroups(t *testing.T) {
+func TestBuildIndexesDuplicateCommandInSameGroupRejected(t *testing.T) {
 	cfg := &AppConfig{
 		Groups: []Group{
 			{
 				Name: "infra",
-				Groups: []Group{
-					{
-						Name:     "docker",
-						Commands: []Command{{Name: "up"}},
-					},
+				Commands: []Command{
+					{Name: "up"},
+					{Name: "up"},
 				},
-				Commands: []Command{{Name: "up"}},
 			},
 		},
 	}
 	err := cfg.BuildIndexes()
 	if err == nil {
-		t.Fatal("expected error for duplicate command name in nested groups")
+		t.Fatal("expected error for duplicate command name in the same group")
 	}
-	if err.Error() != `duplicate command name "up" at paths infra.up, infra.docker.up` {
+	if !strings.Contains(err.Error(), "duplicate command name: up") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

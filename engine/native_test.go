@@ -203,8 +203,9 @@ infra:
 	}
 }
 
-func TestNativeDuplicateNameRejected(t *testing.T) {
-	_, err := NewBuilder("myapp", []byte(`
+func TestNativeDuplicateNameAcrossGroupsAllowed(t *testing.T) {
+	var stdout bytes.Buffer
+	app, err := NewBuilder("myapp", []byte(`
 infra:
   deploy:
     desc: Infra deploy
@@ -215,16 +216,32 @@ app:
     native: true
 `)).
 		RegisterNative("infra.deploy", func(ctx context.Context, nctx NativeContext) error {
+			_, _ = fmt.Fprintln(nctx.Stdout, "infra-deploy-ran")
 			return nil
 		}).
 		RegisterNative("app.deploy", func(ctx context.Context, nctx NativeContext) error {
+			_, _ = fmt.Fprintln(nctx.Stdout, "app-deploy-ran")
 			return nil
 		}).
 		Build()
-	if err == nil {
-		t.Fatal("expected Build() error for duplicate command names")
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "duplicate command name") {
-		t.Fatalf("expected duplicate command name error, got: %v", err)
+	app.opts.Stdout = &stdout
+	app.opts.Stderr = &stdout
+
+	if err := app.Run(context.Background(), []string{"infra", "deploy"}); err != nil {
+		t.Fatalf("Run(infra deploy) error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "infra-deploy-ran") {
+		t.Fatalf("expected infra-deploy output, got: %q", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"app", "deploy"}); err != nil {
+		t.Fatalf("Run(app deploy) error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "app-deploy-ran") {
+		t.Fatalf("expected app-deploy output, got: %q", stdout.String())
 	}
 }

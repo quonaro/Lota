@@ -542,6 +542,62 @@ vars:
 			},
 		},
 		{
+			name: "group with command named show (native)",
+			yamlContent: `user:
+  desc: User management
+  show:
+    desc: Show a user by username
+    native: true
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Groups) != 1 {
+					t.Fatalf("Expected 1 group, got %d", len(cfg.Groups))
+				}
+				group := cfg.Groups[0]
+				if len(group.Commands) != 1 {
+					t.Fatalf("Expected 1 command in group, got %d", len(group.Commands))
+				}
+				cmd := group.Commands[0]
+				if cmd.Name != "show" {
+					t.Errorf("Command name = %q, want show", cmd.Name)
+				}
+				if !cmd.Native {
+					t.Errorf("Command native = %v, want true", cmd.Native)
+				}
+			},
+		},
+		{
+			name: "group with nested group named show",
+			yamlContent: `user:
+  desc: User management
+  show:
+    desc: Show section
+    list:
+      script: echo list
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Groups) != 1 {
+					t.Fatalf("Expected 1 group, got %d", len(cfg.Groups))
+				}
+				group := cfg.Groups[0]
+				if len(group.Groups) != 1 {
+					t.Fatalf("Expected 1 nested group, got %d", len(group.Groups))
+				}
+				sub := group.Groups[0]
+				if sub.Name != "show" {
+					t.Errorf("Nested group name = %q, want show", sub.Name)
+				}
+				if len(sub.Commands) != 1 {
+					t.Fatalf("Expected 1 command in nested group, got %d", len(sub.Commands))
+				}
+				if sub.Commands[0].Name != "list" {
+					t.Errorf("Command name = %q, want list", sub.Commands[0].Name)
+				}
+			},
+		},
+		{
 			name: "invalid color",
 			yamlContent: `build:
   desc: Build

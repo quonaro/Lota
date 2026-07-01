@@ -2,6 +2,7 @@ package complete
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -351,4 +352,27 @@ func hasPrefix(s, prefix string) (string, bool) {
 	}
 
 	return token.Closed(), true
+}
+
+// ExtractCommandArgs strips the binary name and returns only the command-line arguments.
+func ExtractCommandArgs(parsedArgs []Arg, commandName string) []Arg {
+	if len(parsedArgs) == 0 {
+		return nil
+	}
+
+	idx := -1
+	for i := len(parsedArgs) - 1; i >= 0; i-- {
+		token := parsedArgs[i].Text
+		if token == commandName || filepath.Base(token) == commandName {
+			idx = i
+			break
+		}
+	}
+
+	if idx >= 0 {
+		return parsedArgs[idx+1:]
+	}
+
+	// Fallback to previous behavior: assume first token is command.
+	return parsedArgs[1:]
 }

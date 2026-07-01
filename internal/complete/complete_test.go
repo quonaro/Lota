@@ -31,6 +31,33 @@ func TestParseArgs(t *testing.T) {
 	}
 }
 
+func TestExtractCommandArgs(t *testing.T) {
+	tests := []struct {
+		line        string
+		commandName string
+		want        []string
+	}{
+		{"lota he", "lota", []string{"he"}},
+		{"/usr/bin/lota he", "lota", []string{"he"}},
+		{"lota", "lota", nil},
+		{"", "lota", nil},
+		{"lota hello world", "lota", []string{"hello", "world"}},
+	}
+
+	for _, tt := range tests {
+		parsed := ParseArgs(tt.line)
+		got := ExtractCommandArgs(parsed, tt.commandName)
+		if len(got) != len(tt.want) {
+			t.Fatalf("ExtractCommandArgs(%q, %q) got %d args, want %d", tt.line, tt.commandName, len(got), len(tt.want))
+		}
+		for i := range got {
+			if got[i].Text != tt.want[i] {
+				t.Errorf("arg[%d].Text = %q, want %q", i, got[i].Text, tt.want[i])
+			}
+		}
+	}
+}
+
 func TestRun_SubCommands(t *testing.T) {
 	cmd := &complete.Command{
 		Sub: map[string]*complete.Command{

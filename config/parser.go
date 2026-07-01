@@ -525,6 +525,14 @@ func (a *Arg) Parse(s string) error {
 		a.Default = typeParts[1]
 	}
 
+	// Optional marker: str? means the argument is not required
+	if strings.HasSuffix(typeStr, "?") {
+		a.Required = false
+		typeStr = strings.TrimSuffix(typeStr, "?")
+	} else {
+		a.Required = true
+	}
+
 	// Parse arr[N]
 	if strings.HasPrefix(typeStr, "arr[") {
 		a.Type = "arr"
@@ -537,6 +545,11 @@ func (a *Arg) Parse(s string) error {
 		}
 	} else {
 		a.Type = typeStr
+	}
+
+	// A default value makes the argument optional
+	if a.Default != "" {
+		a.Required = false
 	}
 
 	return nil

@@ -342,6 +342,13 @@ func interpolatePlaceholder(placeholder string, context InterpolationContext) (s
 		return value, nil
 	}
 
+	// Optional args without a value resolve to empty string
+	for _, def := range context.ArgDefs {
+		if def.Name == placeholder && !def.Required {
+			return "", nil
+		}
+	}
+
 	return "", ValidationError{
 		Placeholder: placeholder,
 		Reason:      fmt.Sprintf("'%s' is not defined", placeholder),

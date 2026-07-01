@@ -1,8 +1,9 @@
 package runner
 
 import (
-	"github.com/quonaro/lota/config"
 	"testing"
+
+	"github.com/quonaro/lota/config"
 )
 
 func TestParseArgs(t *testing.T) {
@@ -211,9 +212,19 @@ func TestArgParse(t *testing.T) {
 			name:   "array with max",
 			argStr: "files:arr[5]",
 			expected: config.Arg{
-				Name:   "files",
-				Type:   "arr",
-				MaxArr: func() *int { i := 5; return &i }(),
+				Name:     "files",
+				Type:     "arr",
+				Required: true,
+				MaxArr:   func() *int { i := 5; return &i }(),
+			},
+		},
+		{
+			name:   "optional string",
+			argStr: "tag:str?",
+			expected: config.Arg{
+				Name:     "tag",
+				Type:     "str",
+				Required: false,
 			},
 		},
 	}
@@ -252,6 +263,7 @@ func argsEqual(a, b config.Arg) bool {
 		a.Short == b.Short &&
 		a.Type == b.Type &&
 		a.Default == b.Default &&
+		a.Required == b.Required &&
 		a.Wildcard == b.Wildcard &&
 		((a.MaxArr == nil && b.MaxArr == nil) ||
 			(a.MaxArr != nil && b.MaxArr != nil && *a.MaxArr == *b.MaxArr))

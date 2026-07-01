@@ -2,10 +2,11 @@ package runner
 
 import (
 	"bytes"
-	"github.com/quonaro/lota/config"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/quonaro/lota/config"
 )
 
 func TestFindSimilarVars(t *testing.T) {
@@ -245,9 +246,29 @@ func TestInterpolate(t *testing.T) {
 			context: InterpolationContext{
 				Vars:    map[string]string{},
 				Args:    map[string]string{},
-				ArgDefs: []config.Arg{{Name: "param1", Type: "str"}},
+				ArgDefs: []config.Arg{{Name: "param1", Type: "str", Required: true}},
 			},
 			wantErr: true,
+		},
+		{
+			name:   "optional argument resolves to empty string",
+			script: "echo $tag",
+			context: InterpolationContext{
+				Vars:    map[string]string{},
+				Args:    map[string]string{},
+				ArgDefs: []config.Arg{{Name: "tag", Type: "str", Required: false}},
+			},
+			expected: "echo ",
+		},
+		{
+			name:   "optional argument with deprecated syntax",
+			script: "echo {{tag}}",
+			context: InterpolationContext{
+				Vars:    map[string]string{},
+				Args:    map[string]string{},
+				ArgDefs: []config.Arg{{Name: "tag", Type: "str", Required: false}},
+			},
+			expected: "echo ",
 		},
 		{
 			name:   "dollar var inside single quotes is ignored",

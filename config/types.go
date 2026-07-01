@@ -32,6 +32,7 @@ type Group struct {
 	Desc         string     `yaml:"desc"`
 	Color        string     `yaml:"color,omitempty"`
 	InheritColor *bool      `yaml:"inherit_color,omitempty"`
+	Show         *bool      `yaml:"show,omitempty"`
 	Vars         []Var      `yaml:"vars"`
 	Args         []Arg      `yaml:"-"`
 	RawArgs      []string   `yaml:"args"`
@@ -51,6 +52,7 @@ type Command struct {
 	Desc         string     `yaml:"desc"`
 	Color        string     `yaml:"color,omitempty"`
 	InheritColor *bool      `yaml:"inherit_color,omitempty"`
+	Show         *bool      `yaml:"show,omitempty"`
 	Vars         []Var      `yaml:"vars"`
 	Args         []Arg      `yaml:"-"`
 	RawArgs      []string   `yaml:"args"`

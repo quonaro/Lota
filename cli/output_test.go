@@ -1,8 +1,9 @@
 package cli
 
 import (
-	"github.com/quonaro/lota/config"
 	"testing"
+
+	"github.com/quonaro/lota/config"
 )
 
 func TestHashColor(t *testing.T) {
@@ -216,6 +217,30 @@ func TestColorize(t *testing.T) {
 	// colorize with invalid hex falls back to plain text
 	if gotBad := colorize("hello", "#GGGGGG"); gotBad != "hello" {
 		t.Errorf("colorize(hello, \"#GGGGGG\") = %q, want plain \"hello\"", gotBad)
+	}
+}
+
+func TestIsHidden(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name     string
+		show     *bool
+		expected bool
+	}{
+		{"nil show", nil, false},
+		{"show true", &trueVal, false},
+		{"show false", &falseVal, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isHidden(tt.show)
+			if got != tt.expected {
+				t.Errorf("isHidden(%v) = %v, want %v", tt.show, got, tt.expected)
+			}
+		})
 	}
 }
 

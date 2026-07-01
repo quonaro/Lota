@@ -93,6 +93,11 @@ func paddedName(name, colorName string, width int) string {
 	return colored + strings.Repeat(" ", padding)
 }
 
+// isHidden checks if Show is explicitly set to false
+func isHidden(show *bool) bool {
+	return show != nil && !*show
+}
+
 // PrintHelp writes a list of available top-level commands and groups to w.
 // Unlike cli.PrintHelp, it does not print global CLI flags (--init,
 // --completion-script, etc.) because those are irrelevant when Lota is
@@ -105,10 +110,16 @@ func PrintHelp(cfg *config.AppConfig, w io.Writer, appName string) {
 	_, _ = fmt.Fprintln(w, "Commands:")
 
 	for _, group := range cfg.Groups {
+		if isHidden(group.Show) {
+			continue
+		}
 		c := resolveColor(group.Color, group.InheritColor, nil)
 		_, _ = fmt.Fprintf(w, "  %s %s\n", paddedName(group.Name, c, 20), group.Desc)
 	}
 	for _, cmd := range cfg.Commands {
+		if isHidden(cmd.Show) {
+			continue
+		}
 		c := resolveColor(cmd.Color, cmd.InheritColor, nil)
 		_, _ = fmt.Fprintf(w, "  %s %s\n", paddedName(cmd.Name, c, 20), cmd.Desc)
 	}
@@ -145,11 +156,17 @@ func PrintGroupHelp(cfg *config.AppConfig, groups []*config.Group, w io.Writer, 
 	_, _ = fmt.Fprintln(w, "Commands:")
 
 	for _, sub := range group.Groups {
+		if isHidden(sub.Show) {
+			continue
+		}
 		subAncestors := append([]*config.Group(nil), groups...)
 		c := resolveColor(sub.Color, sub.InheritColor, subAncestors)
 		_, _ = fmt.Fprintf(w, "  %s %s\n", paddedName(sub.Name, c, 20), sub.Desc)
 	}
 	for _, cmd := range group.Commands {
+		if isHidden(cmd.Show) {
+			continue
+		}
 		cmdAncestors := append([]*config.Group(nil), groups...)
 		c := resolveColor(cmd.Color, cmd.InheritColor, cmdAncestors)
 		_, _ = fmt.Fprintf(w, "  %s %s\n", paddedName(cmd.Name, c, 20), cmd.Desc)

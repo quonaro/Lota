@@ -92,8 +92,8 @@ func hasField(node *yaml.Node, field string) bool {
 	return false
 }
 
-var groupFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "shell", "log"}
-var commandFields = []string{"desc", "dir", "color", "inherit_color", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log", "native"}
+var groupFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "shell", "log"}
+var commandFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log", "native"}
 
 func suggestField(unknown string, valid []string) string {
 	best := ""
@@ -364,6 +364,12 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 				return fmt.Errorf("%d: invalid inherit_color for group %q: %w", valueNode.Line, g.Name, err)
 			}
 			g.InheritColor = &inherit
+		case "show":
+			var show bool
+			if err := valueNode.Decode(&show); err != nil {
+				return fmt.Errorf("%d: invalid show value for group %q: %w", valueNode.Line, g.Name, err)
+			}
+			g.Show = &show
 		case "vars":
 			if err := valueNode.Decode(&g.Vars); err != nil {
 				return fmt.Errorf("%d: error parsing vars in group %q: %w", valueNode.Line, g.Name, err)
@@ -438,6 +444,12 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 				return fmt.Errorf("%d: invalid inherit_color for command %q: %w", valueNode.Line, c.Name, err)
 			}
 			c.InheritColor = &inherit
+		case "show":
+			var show bool
+			if err := valueNode.Decode(&show); err != nil {
+				return fmt.Errorf("%d: invalid show value for command %q: %w", valueNode.Line, c.Name, err)
+			}
+			c.Show = &show
 		case "vars":
 			if err := valueNode.Decode(&c.Vars); err != nil {
 				return fmt.Errorf("%d: error parsing vars in command %q: %w", valueNode.Line, c.Name, err)

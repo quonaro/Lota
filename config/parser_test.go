@@ -502,6 +502,46 @@ vars:
 			},
 		},
 		{
+			name: "command with show false",
+			yamlContent: `build:
+  desc: Build the app
+  show: false
+  script: go build .
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Commands) != 1 {
+					t.Errorf("Expected 1 command, got %d", len(cfg.Commands))
+					return
+				}
+				cmd := cfg.Commands[0]
+				if cmd.Show == nil || *cmd.Show {
+					t.Errorf("Command show = %v, want false", cmd.Show)
+				}
+			},
+		},
+		{
+			name: "group with show false",
+			yamlContent: `dev:
+  desc: Dev commands
+  show: false
+  run:
+    desc: Run app
+    script: go run .
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Groups) != 1 {
+					t.Errorf("Expected 1 group, got %d", len(cfg.Groups))
+					return
+				}
+				group := cfg.Groups[0]
+				if group.Show == nil || *group.Show {
+					t.Errorf("Group show = %v, want false", group.Show)
+				}
+			},
+		},
+		{
 			name: "invalid color",
 			yamlContent: `build:
   desc: Build

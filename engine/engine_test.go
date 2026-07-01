@@ -389,6 +389,74 @@ func TestPrintGroupHelpFallback(t *testing.T) {
 	}
 }
 
+func TestPrintHelp_HiddenItems(t *testing.T) {
+	falseVal := false
+	cfg := &config.AppConfig{
+		Groups: []config.Group{
+			{Name: "dev", Desc: "Development tasks"},
+			{Name: "secret", Desc: "Secret tasks", Show: &falseVal},
+		},
+		Commands: []config.Command{
+			{Name: "build", Desc: "Build the project"},
+			{Name: "test", Desc: "Run tests", Show: &falseVal},
+		},
+	}
+
+	var buf bytes.Buffer
+	PrintHelp(cfg, &buf, "myapp")
+
+	out := buf.String()
+	if !strings.Contains(out, "dev") {
+		t.Errorf("expected group 'dev', got: %q", out)
+	}
+	if !strings.Contains(out, "build") {
+		t.Errorf("expected command 'build', got: %q", out)
+	}
+	if strings.Contains(out, "secret") {
+		t.Errorf("help should not contain hidden group 'secret', got: %q", out)
+	}
+	if strings.Contains(out, "test") {
+		t.Errorf("help should not contain hidden command 'test', got: %q", out)
+	}
+}
+
+func TestPrintGroupHelp_HiddenItems(t *testing.T) {
+	falseVal := false
+	cfg := &config.AppConfig{
+		Groups: []config.Group{
+			{
+				Name: "deploy",
+				Desc: "Deploy tasks",
+				Groups: []config.Group{
+					{Name: "canary", Desc: "Canary deploy"},
+					{Name: "dark", Desc: "Dark deploy", Show: &falseVal},
+				},
+				Commands: []config.Command{
+					{Name: "build", Desc: "Build"},
+					{Name: "push", Desc: "Push", Show: &falseVal},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	PrintGroupHelp(cfg, []*config.Group{&cfg.Groups[0]}, &buf, "myapp")
+
+	out := buf.String()
+	if !strings.Contains(out, "canary") {
+		t.Errorf("expected sub-group 'canary', got: %q", out)
+	}
+	if !strings.Contains(out, "build") {
+		t.Errorf("expected command 'build', got: %q", out)
+	}
+	if strings.Contains(out, "dark") {
+		t.Errorf("help should not contain hidden sub-group 'dark', got: %q", out)
+	}
+	if strings.Contains(out, "push") {
+		t.Errorf("help should not contain hidden command 'push', got: %q", out)
+	}
+}
+
 func TestApp_NewApp(t *testing.T) {
 	data := []byte(`
 hello:

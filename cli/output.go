@@ -3,14 +3,15 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"github.com/quonaro/lota/config"
-	"github.com/quonaro/lota/runner"
-	"github.com/quonaro/lota/shared"
 	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/runner"
+	"github.com/quonaro/lota/shared"
 
 	"github.com/common-nighthawk/go-figure"
 	"github.com/fatih/color"
@@ -203,17 +204,28 @@ func PrintHelp(configPath string) {
 	fmt.Println("Commands:")
 
 	for _, group := range cfg.Groups {
+		if isHidden(group.Show) {
+			continue
+		}
 		c := resolveColor(group.Color, group.InheritColor, nil)
 		fmt.Printf("  %s %s\n", paddedName(group.Name, c, 18), group.Desc)
 	}
 
 	for _, cmd := range cfg.Commands {
+		if isHidden(cmd.Show) {
+			continue
+		}
 		c := resolveColor(cmd.Color, cmd.InheritColor, nil)
 		fmt.Printf("  %s %s\n", paddedName(cmd.Name, c, 18), cmd.Desc)
 	}
 
 	fmt.Println()
 	printGlobalOptions()
+}
+
+// isHidden checks if Show is explicitly set to false
+func isHidden(show *bool) bool {
+	return show != nil && !*show
 }
 
 // InitConfig creates a default lota.yml at the given path (or current dir if empty)
@@ -439,6 +451,9 @@ func PrintGroupHelp(group *config.Group, ancestors []*config.Group, verbose bool
 	fmt.Println("Commands:")
 
 	for _, sub := range group.Groups {
+		if isHidden(sub.Show) {
+			continue
+		}
 		subAncestors := append([]*config.Group(nil), ancestors...)
 		subAncestors = append(subAncestors, group)
 		c := resolveColor(sub.Color, sub.InheritColor, subAncestors)
@@ -446,6 +461,9 @@ func PrintGroupHelp(group *config.Group, ancestors []*config.Group, verbose bool
 	}
 
 	for _, cmd := range group.Commands {
+		if isHidden(cmd.Show) {
+			continue
+		}
 		cmdAncestors := append([]*config.Group(nil), ancestors...)
 		cmdAncestors = append(cmdAncestors, group)
 		c := resolveColor(cmd.Color, cmd.InheritColor, cmdAncestors)

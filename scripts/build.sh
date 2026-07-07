@@ -3,7 +3,7 @@ set -euo pipefail
 
 BINARY="lota"
 OUTPUT_DIR="dist"
-MODULE="lota"
+MODULE="github.com/quonaro/lota"
 
 TARGETS=(
   "linux   amd64"

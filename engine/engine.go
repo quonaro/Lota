@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/logger"
 	"github.com/quonaro/lota/runner"
 )
 
@@ -48,6 +49,7 @@ func (o Options) toRunOptions() runner.RunOptions {
 
 // LoadConfig parses YAML data, builds indexes, and validates the configuration.
 func LoadConfig(data []byte) (*config.AppConfig, error) {
+	logger.Debug("engine: loading config from bytes")
 	cfg, err := config.ParseConfigFromBytes(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
@@ -56,6 +58,7 @@ func LoadConfig(data []byte) (*config.AppConfig, error) {
 	if err := cfg.BuildIndexes(); err != nil {
 		return nil, fmt.Errorf("build indexes: %w", err)
 	}
+	logger.Debug("engine: indexes built successfully")
 
 	validator := config.GetValidator(cfg, "")
 	result := validator.Validate()
@@ -92,6 +95,7 @@ func LoadConfigFromPath(path string) (*config.AppConfig, string, error) {
 // Run is the CLI-style entrypoint. args contains the full command line,
 // for example []string{"deploy", "prod", "--force"}.
 func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options) error {
+	logger.Debugf("engine: Run called with args: %v", args)
 	if len(args) == 0 {
 		return fmt.Errorf("no command specified")
 	}
@@ -100,6 +104,7 @@ func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options
 	if !result.Exists {
 		return fmt.Errorf("command not found: %s", args[0])
 	}
+	logger.Debugf("engine: command resolved, executing")
 	if result.Command == nil {
 		return &GroupError{
 			Path:   strings.Join(args, " "),
@@ -113,6 +118,7 @@ func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options
 // RunCommand is the programmatic entrypoint. path is a dot-separated command
 // path (e.g., "deploy.prod"), and cmdArgs are the command-specific arguments.
 func RunCommand(ctx context.Context, cfg *config.AppConfig, path string, cmdArgs []string, opts Options) error {
+	logger.Debugf("engine: RunCommand called with path: %s", path)
 	result, err := config.FindCommandByPath(cfg, path)
 	if err != nil {
 		return err
@@ -121,6 +127,7 @@ func RunCommand(ctx context.Context, cfg *config.AppConfig, path string, cmdArgs
 }
 
 func runCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, cliArgs []string, opts Options) error {
+	logger.Debugf("engine: runCommand for: %s", result.Command.Name)
 	if result.Command == nil {
 		return fmt.Errorf("not a command")
 	}
@@ -129,6 +136,7 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	if err != nil {
 		return err
 	}
+	logger.Debugf("engine: resolved %d dependency levels", len(levels))
 
 	parallel := result.Command.Parallel == nil || *result.Command.Parallel
 
@@ -139,6 +147,7 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	var firstErr atomic.Pointer[error]
 
 	for _, level := range levels {
+		logger.Debugf("engine: processing dependency level with %d commands", len(level))
 		if f := firstErr.Load(); f != nil {
 			return *f
 		}
@@ -204,6 +213,7 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 		return err
 	}
 	vars := runner.ResolveVars(*cfg, result.Groups, *result.Command)
+	logger.Debugf("engine: resolved %d vars, shell: %s", len(vars), shell)
 
 	interpCtx := runner.InterpolationContext{
 		Vars:       vars,
@@ -219,6 +229,7 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
 	if result.Command.Native {
+		logger.Debug("engine: executing native command")
 		cmdPath := config.CommandPath(result.Command, result.Groups)
 		if err := runNative(ctx, cmdPath, NativeContext{
 			Vars:   vars,
@@ -229,6 +240,7 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 			return err
 		}
 	} else {
+		logger.Debug("engine: executing shell command")
 		if err := runner.ExecuteCommand(ctx, result.Command, interpCtx, runOpts, shell, dir); err != nil {
 			return err
 		}

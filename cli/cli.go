@@ -8,21 +8,25 @@ import (
 
 	"github.com/quonaro/lota/config"
 	"github.com/quonaro/lota/engine"
+	"github.com/quonaro/lota/logger"
 )
 
 // Run executes the CLI application
 func Run(ctx context.Context) error {
+	logger.Debugf("cli: starting with args: %v", os.Args)
 	if len(os.Args) < 2 {
 		PrintHelp("")
 		return nil
 	}
 
 	cliArgs := os.Args[1:]
+	logger.Debugf("cli: parsed cli args: %v", cliArgs)
 
 	flags, remainingArgs, err := ParseGlobalFlags(cliArgs)
 	if err != nil {
 		return err
 	}
+	logger.Debugf("cli: parsed flags - verbose: %v, dry-run: %v, config: %s", flags.Verbose, flags.DryRun, flags.Config)
 
 	// Handle -G and -U shortcuts
 	if flags.GlobalConfig {
@@ -57,6 +61,7 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
+	logger.Debugf("cli: config loaded successfully")
 
 	fc, err := config.GetConfigPath(flags.Config)
 	if err != nil {
@@ -88,6 +93,7 @@ func Run(ctx context.Context) error {
 	if !result.Exists {
 		return commandNotFoundError(cfg, remainingArgs)
 	}
+	logger.Debugf("cli: resolved command, executing with engine")
 
 	verbose := flags.Verbose || hasVerboseFlag(cmdArgs)
 
@@ -106,6 +112,7 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
+	logger.Debugf("cli: working directory: %s", cwd)
 
 	opts := engine.Options{
 		Verbose:    flags.Verbose,

@@ -3,18 +3,22 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/quonaro/lota/logger"
 )
 
 // ResolveCommand greedily walks the config tree consuming CLI tokens.
 // Returns the resolved result, remaining (unconsumed) arguments, and index of last found element.
 // Supports arbitrary nesting: group subgroup ... command [args...]
 func ResolveCommand(cfg *AppConfig, cliArgs []string) (SearchResult, []string, int) {
+	logger.Debugf("config: resolving command with args: %v", cliArgs)
 	if len(cliArgs) == 0 {
 		return SearchResult{Exists: false}, cliArgs, 0
 	}
 
 	result := cfg.Find(cliArgs[0])
 	if !result.Exists {
+		logger.Debugf("config: command not found: %s", cliArgs[0])
 		return SearchResult{Exists: false}, cliArgs, 0
 	}
 
@@ -50,11 +54,19 @@ func ResolveCommand(cfg *AppConfig, cliArgs []string) (SearchResult, []string, i
 		searchIdx++
 	}
 
+	logger.Debugf("config: resolved to %s with %d remaining args",
+		func() string {
+			if result.Command != nil {
+				return "command: " + result.Command.Name
+			}
+			return "group"
+		}(), len(cliArgs[consumed:]))
 	return result, cliArgs[consumed:], consumed - 1
 }
 
 // FindCommandByPath finds a command by its full dot-separated path (e.g., "infra.docker.up").
 func FindCommandByPath(cfg *AppConfig, path string) (SearchResult, error) {
+	logger.Debugf("config: finding command by path: %s", path)
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 {
 		return SearchResult{}, fmt.Errorf("empty command path")
@@ -104,6 +116,7 @@ func ResolveDependencies(cfg *AppConfig, result SearchResult) ([]SearchResult, e
 	if result.Command == nil {
 		return nil, nil
 	}
+	logger.Debugf("config: resolving dependencies for command: %s", result.Command.Name)
 
 	visited := make(map[string]bool)
 	completed := make(map[string]bool)
@@ -123,6 +136,7 @@ func ResolveDependencies(cfg *AppConfig, result SearchResult) ([]SearchResult, e
 		visited[path] = true
 
 		for _, depPath := range cmd.Depends {
+			logger.Debugf("config: processing dependency: %s", depPath)
 			depResult, err := FindCommandByPath(cfg, depPath)
 			if err != nil {
 				return fmt.Errorf("dependency %q of %s: %w", depPath, path, err)
@@ -152,5 +166,6 @@ func ResolveDependencies(cfg *AppConfig, result SearchResult) ([]SearchResult, e
 		order = order[:len(order)-1]
 	}
 
+	logger.Debugf("config: resolved %d dependencies", len(order))
 	return order, nil
 }

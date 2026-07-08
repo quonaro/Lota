@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/logger"
 )
 
 var placeholderRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
@@ -60,12 +61,15 @@ func findSimilarVars(placeholder string, vars map[string]string) []string {
 // Interpolate replaces variable and argument placeholders in script with their values.
 // Supports type-aware interpolation and validation.
 func Interpolate(script string, context InterpolationContext) (string, error) {
+	logger.Debugf("interpolator: starting interpolation")
 	result := script
 	localVars := detectScriptLocalVars(script)
 	systemEnvVars := buildSystemEnvVarSet()
+	logger.Debugf("interpolator: detected %d local vars, %d system env vars", len(localVars), len(systemEnvVars))
 
 	// Process $var syntax first
 	dollarVars := findDollarVars(script)
+	logger.Debugf("interpolator: found %d $var patterns", len(dollarVars))
 	for _, varName := range dollarVars {
 		// Skip special variables like $CWD
 		if isSpecialVariable(varName) {
@@ -90,6 +94,7 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 
 	// Process {{}} syntax (deprecated for vars)
 	placeholders := findPlaceholders(script)
+	logger.Debugf("interpolator: found %d {{}} placeholders", len(placeholders))
 
 	// Collect all validation errors
 	var errors []string
@@ -320,8 +325,10 @@ func isShellIdentRune(r rune, first bool) bool {
 // interpolatePlaceholder interpolates a single placeholder.
 // args have higher priority than vars: same name in both — arg wins.
 func interpolatePlaceholder(placeholder string, context InterpolationContext) (string, error) {
+	logger.Debugf("interpolator: interpolating placeholder: %s", placeholder)
 	// Check args first (higher priority)
 	if value, exists := context.Args[placeholder]; exists {
+		logger.Debugf("interpolator: found in args: %s=%s", placeholder, value)
 		var argDef *config.Arg
 		for _, def := range context.ArgDefs {
 			if def.Name == placeholder {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/quonaro/lota/config"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/logger"
 )
 
 // PrefixWriter wraps an io.Writer and prefixes each line with a task name.
@@ -399,6 +401,7 @@ func sortedMapKeys(m map[string]string) []string {
 }
 
 func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx InterpolationContext, opts RunOptions, shell string, dir string, stdout, stderr io.Writer, prefix string) error {
+	logger.Debugf("runner: executing command: %s", cmd.Name)
 	if stdout == nil {
 		stdout = os.Stdout
 	}
@@ -409,6 +412,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 	unified := MergeVarsAndArgs(interpCtx.Vars, interpCtx.Args)
 	env := VarsToEnv(unified)
 	envKeys := sortedMapKeys(unified)
+	logger.Debugf("runner: resolved %d environment variables", len(envKeys))
 
 	if opts.Verbose {
 		_, _ = fmt.Fprintf(stdout, "[verbose] command: %s\n", cmd.Name)
@@ -436,6 +440,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 	failed := false
 
 	runStage := func(name, script string) error {
+		logger.Debugf("runner: running stage: %s", name)
 		interpolated, err := Interpolate(script, interpCtx)
 		if err != nil {
 			return fmt.Errorf("%s hook interpolation failed: %w", name, err)
@@ -451,6 +456,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 
 	// before hook
 	if cmd.Before != "" {
+		logger.Debug("runner: executing before hook")
 		if err := runStage("before", cmd.Before); err != nil {
 			execErr = fmt.Errorf("before hook failed: %w", err)
 			failed = true
@@ -459,6 +465,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 
 	// script
 	if !failed && cmd.Script != "" {
+		logger.Debug("runner: executing main script")
 		if err := runStage("script", cmd.Script); err != nil {
 			execErr = err
 			failed = true
@@ -467,6 +474,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 
 	// after hook — runs only if before and script succeeded
 	if !failed && cmd.After != "" {
+		logger.Debug("runner: executing after hook")
 		if err := runStage("after", cmd.After); err != nil {
 			execErr = fmt.Errorf("after hook failed: %w", err)
 			failed = true
@@ -475,6 +483,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 
 	// fallback hook — runs on any error in before/script/after
 	if failed && cmd.Fallback != "" {
+		logger.Debug("runner: executing fallback hook")
 		if err := runStage("fallback", cmd.Fallback); err != nil {
 			if prefix != "" {
 				_, _ = fmt.Fprintf(stderr, "%s fallback hook failed: %v\n", prefix, err)
@@ -489,6 +498,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 
 	// finally hook — always runs at the end
 	if cmd.Finally != "" {
+		logger.Debug("runner: executing finally hook")
 		if err := runStage("finally", cmd.Finally); err != nil {
 			if prefix != "" {
 				_, _ = fmt.Fprintf(stderr, "%s finally hook failed: %v\n", prefix, err)
@@ -502,11 +512,13 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 }
 
 func ExecuteCommand(ctx context.Context, cmd *config.Command, interpCtx InterpolationContext, opts RunOptions, shell string, dir string) error {
+	logger.Debugf("runner: ExecuteCommand called for: %s", cmd.Name)
 	return executeCommandInternal(ctx, cmd, interpCtx, opts, shell, dir, opts.Stdout, opts.Stderr, "")
 }
 
 // ExecuteCommandWithPrefix is like ExecuteCommand but prefixes each line of output with the given prefix.
 func ExecuteCommandWithPrefix(ctx context.Context, cmd *config.Command, interpCtx InterpolationContext, opts RunOptions, shell string, dir string, prefix string) error {
+	logger.Debugf("runner: ExecuteCommandWithPrefix called for: %s with prefix: %s", cmd.Name, prefix)
 	stdout := opts.Stdout
 	stderr := opts.Stderr
 	if stdout == nil {

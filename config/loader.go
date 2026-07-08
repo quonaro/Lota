@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/quonaro/lota/logger"
 	"github.com/quonaro/lota/shared"
 )
 
@@ -30,21 +31,27 @@ func CurrentDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get current dir: %w", err)
 	}
+	logger.Debugf("config: current directory: %s", dir)
 	return dir, nil
 }
 
 func findConfigFile(dir string) (string, error) {
+	logger.Debugf("config: searching for config file starting from: %s", dir)
 	var checked []string
 	for {
 		// Try .yml first (backward compatibility)
 		ymlPath := filepath.Join(dir, shared.ConfigFileName)
+		logger.Debugf("config: checking for .yml: %s", ymlPath)
 		if _, err := os.Stat(ymlPath); err == nil {
+			logger.Debugf("config: found config file: %s", ymlPath)
 			return ymlPath, nil
 		}
 
 		// Try .yaml
 		yamlPath := filepath.Join(dir, shared.ConfigFileNameYAML)
+		logger.Debugf("config: checking for .yaml: %s", yamlPath)
 		if _, err := os.Stat(yamlPath); err == nil {
+			logger.Debugf("config: found config file: %s", yamlPath)
 			return yamlPath, nil
 		}
 
@@ -67,6 +74,7 @@ func findConfigFile(dir string) (string, error) {
 }
 
 func GetConfigPath(path string) (*FileConfig, error) {
+	logger.Debugf("config: resolving config path for: %s", path)
 	if path == "" {
 		dir, err := CurrentDir()
 		if err != nil {
@@ -81,12 +89,14 @@ func GetConfigPath(path string) (*FileConfig, error) {
 
 	// Handle HTTP/HTTPS URLs
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		logger.Debugf("config: detected HTTP URL, using cache")
 		// Use cached path
 		cachePath := GetCachePath(path)
 		return &FileConfig{Path: cachePath}, nil
 	}
 
 	if isDir(path) {
+		logger.Debugf("config: path is a directory, searching for config")
 		configPath, err := findConfigFile(path)
 		if err != nil {
 			return nil, err
@@ -94,6 +104,7 @@ func GetConfigPath(path string) (*FileConfig, error) {
 		return &FileConfig{Path: configPath}, nil
 	}
 
+	logger.Debugf("config: using provided path as config file: %s", path)
 	return &FileConfig{Path: path}, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/quonaro/lota/logger"
 	"gopkg.in/yaml.v3"
 )
 
@@ -235,6 +236,7 @@ func ParseConfigWithWriter(path string, warnTo io.Writer) (*AppConfig, error) {
 }
 
 func ParseConfigWithWriterAndImports(path string, warnTo io.Writer, allowImports bool) (*AppConfig, error) {
+	logger.Debugf("config: reading config from path: %s", path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -263,12 +265,14 @@ func ParseConfigFromReaderWithWriter(r io.Reader, warnTo io.Writer) (*AppConfig,
 }
 
 func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, allowImports bool, basePath string) (*AppConfig, error) {
+	logger.Debug("config: reading config from reader")
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 
 	var node yaml.Node
+	logger.Debug("config: unmarshaling YAML")
 	if err := yaml.Unmarshal(data, &node); err != nil {
 		return nil, err
 	}
@@ -294,6 +298,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 		Groups:   make([]Group, 0),
 		Commands: make([]Command, 0),
 	}
+	logger.Debug("config: parsing root level fields")
 
 	for i := 0; i < len(root.Content); i += 2 {
 		key := root.Content[i].Value
@@ -301,10 +306,12 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 
 		switch key {
 		case "vars":
+			logger.Debug("config: parsing vars")
 			if err := valueNode.Decode(&config.Vars); err != nil {
 				return nil, err
 			}
 		case "args":
+			logger.Debug("config: parsing args")
 			if err := valueNode.Decode(&config.RawArgs); err != nil {
 				return nil, err
 			}
@@ -332,6 +339,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 		default:
 			// Distinguish command (has "script" or "native" field) from group
 			if hasField(valueNode, "script") || hasField(valueNode, "native") {
+				logger.Debugf("config: parsing command: %s", key)
 				var cmd Command
 				cmd.Name = key
 				if err := valueNode.Decode(&cmd); err != nil {
@@ -339,6 +347,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 				}
 				config.Commands = append(config.Commands, cmd)
 			} else {
+				logger.Debugf("config: parsing group: %s", key)
 				var group Group
 				group.Name = key
 				if err := valueNode.Decode(&group); err != nil {
@@ -349,6 +358,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 		}
 	}
 
+	logger.Debugf("config: parsed %d groups and %d commands", len(config.Groups), len(config.Commands))
 	return config, nil
 }
 
@@ -381,6 +391,7 @@ func (g *Group) tryParseNestedCommandOrGroup(key string, valueNode *yaml.Node, l
 }
 
 func (g *Group) UnmarshalYAML(node *yaml.Node) error {
+	logger.Debugf("config: unmarshaling group: %s", g.Name)
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("%d: expected mapping node for group, got %s", node.Line, nodeKindName(node.Kind))
 	}
@@ -511,6 +522,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 }
 
 func (c *Command) UnmarshalYAML(node *yaml.Node) error {
+	logger.Debugf("config: unmarshaling command: %s", c.Name)
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("%d: expected mapping node for command, got %s", node.Line, nodeKindName(node.Kind))
 	}

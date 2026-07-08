@@ -34,7 +34,7 @@ func loadYAMLFile(basePath, path, prefix string) (map[string]string, error) {
 
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, fmt.Errorf("invalid YAML syntax in %s: %w", fullPath, err)
+		return nil, fmt.Errorf("invalid YAML syntax in file %s: %w", fullPath, err)
 	}
 
 	// Unwrap Document node

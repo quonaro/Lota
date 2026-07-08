@@ -47,6 +47,73 @@ func (o Options) toRunOptions() runner.RunOptions {
 	}
 }
 
+// suggestSimilarCommand finds a command similar to the unknown one using Levenshtein distance
+func suggestSimilarCommand(unknown string, commands []string) string {
+	best := ""
+	bestScore := 9999
+	for _, cmd := range commands {
+		dist := levenshteinDistanceEngine(unknown, cmd)
+		if dist < bestScore {
+			bestScore = dist
+			best = cmd
+		}
+	}
+	maxLen := max(len(unknown), len(best))
+	if maxLen == 0 {
+		return ""
+	}
+	normalized := float64(bestScore) / float64(maxLen)
+	if normalized <= 0.5 {
+		return best
+	}
+	return ""
+}
+
+func levenshteinDistanceEngine(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	prev := make([]int, len(b)+1)
+	curr := make([]int, len(b)+1)
+	for j := 0; j <= len(b); j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			insertion := curr[j-1] + 1
+			deletion := prev[j] + 1
+			substitution := prev[j-1] + cost
+			curr[j] = minEngine(insertion, deletion, substitution)
+		}
+		prev, curr = curr, prev
+	}
+
+	return prev[len(b)]
+}
+
+func minEngine(a, b, c int) int {
+	if a <= b && a <= c {
+		return a
+	}
+	if b <= c {
+		return b
+	}
+	return c
+}
+
 // LoadConfig parses YAML data, builds indexes, and validates the configuration.
 func LoadConfig(data []byte) (*config.AppConfig, error) {
 	logger.Debug("engine: loading config from bytes")
@@ -97,11 +164,15 @@ func LoadConfigFromPath(path string) (*config.AppConfig, string, error) {
 func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options) error {
 	logger.Debugf("engine: Run called with args: %v", args)
 	if len(args) == 0 {
-		return fmt.Errorf("no command specified")
+		return fmt.Errorf("no command specified. Use --help to see available commands")
 	}
 
 	result, remainingArgs, _ := config.ResolveCommand(cfg, args)
 	if !result.Exists {
+		suggestion := suggestSimilarCommand(args[0], cfg.GetAllCommandNames())
+		if suggestion != "" {
+			return fmt.Errorf("command not found: %s. Did you mean: %s?", args[0], suggestion)
+		}
 		return fmt.Errorf("command not found: %s", args[0])
 	}
 	logger.Debugf("engine: command resolved, executing")
@@ -184,7 +255,7 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 					fmt.Printf("=> Running dependency: %s\n", path)
 				}
 				if err := executeSingleCommand(ctx, cfg, dep, opts, prefix); err != nil {
-					return fmt.Errorf("dependency failed: %w", err)
+					return fmt.Errorf("dependency %s failed: %w", path, err)
 				}
 			}
 		}

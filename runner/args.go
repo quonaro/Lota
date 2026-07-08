@@ -9,6 +9,77 @@ import (
 
 const defaultMaxArrayElements = 5
 
+// suggestSimilarFlag finds a flag similar to the unknown one using Levenshtein distance
+func suggestSimilarFlag(unknown string, flagToArgDef map[string]*config.Arg) string {
+	best := ""
+	bestScore := 9999
+	for flag := range flagToArgDef {
+		dist := levenshteinDistance(unknown, flag)
+		if dist < bestScore {
+			bestScore = dist
+			best = flag
+		}
+	}
+	maxLen := max(len(unknown), len(best))
+	if maxLen == 0 {
+		return ""
+	}
+	normalized := float64(bestScore) / float64(maxLen)
+	if normalized <= 0.5 {
+		return best
+	}
+	return ""
+}
+
+func levenshteinDistance(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	prev := make([]int, len(b)+1)
+	curr := make([]int, len(b)+1)
+	for j := 0; j <= len(b); j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			insertion := curr[j-1] + 1
+			deletion := prev[j] + 1
+			substitution := prev[j-1] + cost
+			curr[j] = min(insertion, deletion, substitution)
+		}
+		prev, curr = curr, prev
+	}
+
+	return prev[len(b)]
+}
+
+func min(a, b, c int) int {
+	if a <= b && a <= c {
+		return a
+	}
+	if b <= c {
+		return b
+	}
+	return c
+}
+
+func validBooleanValues() string {
+	return "true, false, 1, 0, yes, no, on, off"
+}
+
 // ParseArgs converts command line arguments to a map based on argument definitions.
 // Supports wildcard handling, boolean flags, and validation.
 func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error) {
@@ -95,7 +166,7 @@ func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error
 					if hasValue {
 						boolValue, err := parseBoolValue(value)
 						if err != nil {
-							return nil, fmt.Errorf("invalid boolean value for %s: %v", matchingArgDef.Name, err)
+							return nil, fmt.Errorf("invalid boolean value for %s: %v. Valid values: %s", matchingArgDef.Name, err, validBooleanValues())
 						}
 						result[matchingArgDef.Name] = boolValue
 					} else {
@@ -115,6 +186,10 @@ func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error
 					}
 				}
 			} else {
+				suggestion := suggestSimilarFlag(arg, flagToArgDef)
+				if suggestion != "" {
+					return nil, fmt.Errorf("unknown flag: %s. Did you mean: %s?", arg, suggestion)
+				}
 				return nil, fmt.Errorf("unknown flag: %s", arg)
 			}
 
@@ -153,7 +228,7 @@ func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error
 				case "bool":
 					boolValue, err := parseBoolValue(arg)
 					if err != nil {
-						return nil, fmt.Errorf("invalid boolean value for %s: %v", argDef.Name, err)
+						return nil, fmt.Errorf("invalid boolean value for %s: %v. Valid values: %s", argDef.Name, err, validBooleanValues())
 					}
 					result[argDef.Name] = boolValue
 					i++
@@ -175,7 +250,11 @@ func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error
 			if argDef.Default != "" {
 				result[argDef.Name] = argDef.Default
 			} else if argDef.Required && !argDef.Wildcard {
-				return nil, fmt.Errorf("required argument %s is missing", argDef.Name)
+				typeInfo := ""
+				if argDef.Type != "" {
+					typeInfo = fmt.Sprintf(" (type: %s)", argDef.Type)
+				}
+				return nil, fmt.Errorf("required argument '%s' is missing%s. Check --help for more information", argDef.Name, typeInfo)
 			}
 		}
 	}
@@ -204,6 +283,6 @@ func parseBoolValue(value string) (string, error) {
 				return "false", nil
 			}
 		}
-		return "", fmt.Errorf("invalid boolean value: %s", value)
+		return "", fmt.Errorf("invalid boolean value: %s. Valid values: %s", value, validBooleanValues())
 	}
 }

@@ -231,3 +231,31 @@ func (g *Group) countCommandsRecursive() int {
 	}
 	return count
 }
+
+func (c *AppConfig) GetAllCommandNames() []string {
+	var names []string
+	names = append(names, c.getCommandNamesRecursive()...)
+	return names
+}
+
+func (c *AppConfig) getCommandNamesRecursive() []string {
+	var names []string
+	for _, cmd := range c.Commands {
+		names = append(names, cmd.Name)
+	}
+	for _, group := range c.Groups {
+		names = append(names, group.getCommandNamesRecursive()...)
+	}
+	return names
+}
+
+func (g *Group) getCommandNamesRecursive() []string {
+	var names []string
+	for _, cmd := range g.Commands {
+		names = append(names, cmd.Name)
+	}
+	for _, sub := range g.Groups {
+		names = append(names, sub.getCommandNamesRecursive()...)
+	}
+	return names
+}

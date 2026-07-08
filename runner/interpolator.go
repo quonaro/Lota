@@ -82,12 +82,12 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 			}
 			similar := findSimilarVars(varName, context.Vars)
 			if len(similar) > 0 {
-				return "", fmt.Errorf("%s not found. Available vars with '%s': %s. Check --help for more information", varName, varName, strings.Join(similar, ", "))
+				return "", fmt.Errorf("variable '%s' not found. Available variables with similar name: %s. Check --help for more information", varName, strings.Join(similar, ", "))
 			}
 			if argDefined(varName, context.ArgDefs) {
-				return "", fmt.Errorf("%s is required. Check --help for more information", varName)
+				return "", fmt.Errorf("argument '%s' is required. Check --help for more information", varName)
 			}
-			return "", fmt.Errorf("%s is required. Check --help for more information", varName)
+			return "", fmt.Errorf("variable '%s' is required. Check --help for more information", varName)
 		}
 		result = strings.ReplaceAll(result, "$"+varName, value)
 	}
@@ -103,9 +103,9 @@ func Interpolate(script string, context InterpolationContext) (string, error) {
 		if err != nil {
 			similar := findSimilarVars(placeholder, context.Vars)
 			if len(similar) > 0 {
-				errors = append(errors, fmt.Sprintf("%s not found. Available vars with '%s': %s", placeholder, placeholder, strings.Join(similar, ", ")))
+				errors = append(errors, fmt.Sprintf("variable '%s' not found. Available variables with similar name: %s", placeholder, strings.Join(similar, ", ")))
 			} else {
-				errors = append(errors, fmt.Sprintf("%s is required", placeholder))
+				errors = append(errors, fmt.Sprintf("variable '%s' is required", placeholder))
 			}
 			continue
 		}

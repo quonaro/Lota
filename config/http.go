@@ -42,7 +42,7 @@ func FetchURL(url string) (data []byte, err error) {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch URL: %w", err)
+		return nil, fmt.Errorf("failed to fetch URL %s: %w", url, err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
@@ -51,7 +51,7 @@ func FetchURL(url string) (data []byte, err error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP request failed with status: %s", resp.Status)
+		return nil, fmt.Errorf("HTTP request failed for URL %s with status: %s", url, resp.Status)
 	}
 
 	// Limit response size to 100MB

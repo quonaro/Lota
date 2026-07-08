@@ -15,5 +15,5 @@ type GroupError struct {
 }
 
 func (e *GroupError) Error() string {
-	return fmt.Sprintf("%q is a group, not a command", e.Path)
+	return fmt.Sprintf("%q is a group, not a command. Use --help to see available commands in this group", e.Path)
 }

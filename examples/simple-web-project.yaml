@@ -1,0 +1,44 @@
+# Simple Web Project Example
+# Demonstrates basic web development workflow with environment variables and arguments
+
+shell: bash
+
+vars:
+  - import:env .env
+  - NODE_ENV=development
+
+args:
+  - port|p:int=3000
+
+dev:
+  desc: Development commands
+  install:
+    desc: Install dependencies
+    script: npm install
+  start:
+    desc: Start development server
+    args:
+      - hot|h:bool
+    script: |
+      if [ "$hot" = "true" ]; then
+        npm run dev
+      else
+        npm start
+      fi
+
+build:
+  desc: Build for production
+  before: npm run clean
+  script: npm run build
+  after: echo "Build completed successfully"
+
+test:
+  desc: Run tests
+  args:
+    - coverage|c:bool
+  script: |
+    if [ "$coverage" = "true" ]; then
+      npm test -- --coverage
+    else
+      npm test
+    fi

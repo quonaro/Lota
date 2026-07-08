@@ -1,0 +1,50 @@
+# DevOps / Infrastructure Example
+# Demonstrates Docker and Kubernetes operations with nested groups
+
+shell: bash
+
+vars:
+  - DOCKER_COMPOSE=docker-compose
+  - KUBECTL=kubectl
+
+infra:
+  desc: Infrastructure management
+  docker:
+    desc: Docker operations
+    up:
+      desc: Start all services
+      script: $DOCKER_COMPOSE up -d
+    down:
+      desc: Stop all services
+      script: $DOCKER_COMPOSE down
+    logs:
+      desc: View logs
+      args:
+        - service:str
+        - ...tail
+      script: $DOCKER_COMPOSE logs -f "$service" "$tail"
+  k8s:
+    desc: Kubernetes operations
+    namespace:
+      desc: Namespace operations
+      create:
+        desc: Create namespace
+        args:
+          - name:str
+        script: $KUBECTL create namespace "$name"
+      delete:
+        desc: Delete namespace
+        args:
+          - name:str
+        script: $KUBECTL delete namespace "$name"
+    deploy:
+      desc: Deploy application
+      args:
+        - env|e:str=dev
+        - dry|d:bool
+      script: |
+        if [ "$dry" = "true" ]; then
+          $KUBECTL apply --dry-run=client -f "k8s/$env/"
+        else
+          $KUBECTL apply -f "k8s/$env/"
+        fi

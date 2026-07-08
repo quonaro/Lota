@@ -1,0 +1,47 @@
+# Go Project Example
+# Demonstrates build, test, and release workflows for Go applications
+
+shell: bash
+
+vars:
+  - GOOS=linux
+  - GOARCH=amd64
+  - BINARY_NAME=app
+
+args:
+  - target|t:str=linux/amd64
+
+build:
+  desc: Build the application
+  args:
+    - output|o:str=./bin
+    - race|r:bool
+  script: |
+    if [ "$race" = "true" ]; then
+      go build -race -o "$output/$BINARY_NAME" .
+    else
+      go build -o "$output/$BINARY_NAME" .
+    fi
+
+test:
+  desc: Run tests
+  args:
+    - verbose|v:bool
+    - cover|c:bool
+  script: |
+    FLAGS=""
+    if [ "$verbose" = "true" ]; then
+      FLAGS="$FLAGS -v"
+    fi
+    if [ "$cover" = "true" ]; then
+      FLAGS="$FLAGS -cover"
+    fi
+    go test $FLAGS ./...
+
+release:
+  desc: Build release binaries
+  before: echo "Building release for $target"
+  script: |
+    IFS=/ read -r GOOS GOARCH <<< "$target"
+    go build -o ./dist/${BINARY_NAME}-${GOOS}-${GOARCH} .
+  after: ls -lh ./dist/

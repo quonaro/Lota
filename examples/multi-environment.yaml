@@ -1,0 +1,48 @@
+# Multi-Environment Project Example
+# Demonstrates environment-specific configurations with config imports
+
+shell: bash
+
+vars:
+  - import:env .env.local
+  - import:env .env.shared
+  - import:yaml config/secrets.yaml@public app # Import public config section
+
+args:
+  - environment|env:str=dev
+
+db:
+  desc: Database operations
+  migrate:
+    desc: Run database migrations
+    script: |
+      case "$environment" in
+        dev)   npm run db:migrate:dev ;;
+        staging) npm run db:migrate:staging ;;
+        prod)  npm run db:migrate:prod ;;
+        *)     echo "Unknown environment" ;;
+      esac
+  seed:
+    desc: Seed database with test data
+    before: echo "Seeding $environment database..."
+    script: npm run "db:seed:$environment"
+    after: echo "Database seeded successfully"
+
+deploy:
+  desc: Deployment operations
+  staging:
+    desc: Deploy to staging
+    script: |
+      npm run build:staging
+      npm run deploy:staging
+  production:
+    desc: Deploy to production
+    args:
+      - confirm|c:bool
+    script: |
+      if [ "$confirm" != "true" ]; then
+        echo "Use --confirm to deploy to production"
+        exit 1
+      fi
+      npm run build:prod
+      npm run deploy:prod

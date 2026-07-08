@@ -49,7 +49,12 @@ git clone https://github.com/quonaro/lota.git
 cd lota && go build -o lota . && sudo mv lota /usr/local/bin/
 ```
 
-## 🚀 Quick Start
+## � Documentation
+
+- **[Embedding Guide](docs/EMBEDDING.md)** - How to embed Lota in your Go application
+- **[Examples](examples/)** - Complete configuration examples for various use cases
+
+## �🚀 Quick Start
 
 Initialize a new configuration:
 
@@ -173,202 +178,13 @@ test: build
 
 ## Examples
 
-### Simple Web Project
+See the [examples/](examples/) directory for complete working configurations:
 
-```yaml
-shell: bash
-
-vars:
-  - import:env .env
-  - NODE_ENV=development
-
-args:
-  - port|p:int=3000
-
-dev:
-  desc: Development commands
-  install:
-    desc: Install dependencies
-    script: npm install
-  start:
-    desc: Start development server
-    args:
-      - hot|h:bool
-    script: |
-      if [ "$hot" = "true" ]; then
-        npm run dev
-      else
-        npm start
-      fi
-
-build:
-  desc: Build for production
-  before: npm run clean
-  script: npm run build
-  after: echo "Build completed successfully"
-
-test:
-  desc: Run tests
-  args:
-    - coverage|c:bool
-  script: |
-    if [ "$coverage" = "true" ]; then
-      npm test -- --coverage
-    else
-      npm test
-    fi
-```
-
-### DevOps / Infrastructure
-
-```yaml
-shell: bash
-
-vars:
-  - DOCKER_COMPOSE=docker-compose
-  - KUBECTL=kubectl
-
-infra:
-  desc: Infrastructure management
-  docker:
-    desc: Docker operations
-    up:
-      desc: Start all services
-      script: $DOCKER_COMPOSE up -d
-    down:
-      desc: Stop all services
-      script: $DOCKER_COMPOSE down
-    logs:
-      desc: View logs
-      args:
-        - service:str
-        - ...tail
-      script: $DOCKER_COMPOSE logs -f "$service" "$tail"
-  k8s:
-    desc: Kubernetes operations
-    namespace:
-      desc: Namespace operations
-      create:
-        desc: Create namespace
-        args:
-          - name:str
-        script: $KUBECTL create namespace "$name"
-      delete:
-        desc: Delete namespace
-        args:
-          - name:str
-        script: $KUBECTL delete namespace "$name"
-    deploy:
-      desc: Deploy application
-      args:
-        - env|e:str=dev
-        - dry|d:bool
-      script: |
-        if [ "$dry" = "true" ]; then
-          $KUBECTL apply --dry-run=client -f "k8s/$env/"
-        else
-          $KUBECTL apply -f "k8s/$env/"
-        fi
-```
-
-### Go Project
-
-```yaml
-shell: bash
-
-vars:
-  - GOOS=linux
-  - GOARCH=amd64
-  - BINARY_NAME=app
-
-args:
-  - target|t:str=linux/amd64
-
-build:
-  desc: Build the application
-  args:
-    - output|o:str=./bin
-    - race|r:bool
-  script: |
-    if [ "$race" = "true" ]; then
-      go build -race -o "$output/$BINARY_NAME" .
-    else
-      go build -o "$output/$BINARY_NAME" .
-    fi
-
-test:
-  desc: Run tests
-  args:
-    - verbose|v:bool
-    - cover|c:bool
-  script: |
-    FLAGS=""
-    if [ "$verbose" = "true" ]; then
-      FLAGS="$FLAGS -v"
-    fi
-    if [ "$cover" = "true" ]; then
-      FLAGS="$FLAGS -cover"
-    fi
-    go test $FLAGS ./...
-
-release:
-  desc: Build release binaries
-  before: echo "Building release for $target"
-  script: |
-    IFS=/ read -r GOOS GOARCH <<< "$target"
-    go build -o ./dist/${BINARY_NAME}-${GOOS}-${GOARCH} .
-  after: ls -lh ./dist/
-```
-
-### Multi-Environment Project
-
-```yaml
-shell: bash
-
-vars:
-  - import:env .env.local
-  - import:env .env.shared
-  - import:yaml config/secrets.yaml@public app # Import public config section
-
-args:
-  - environment|env:str=dev
-
-db:
-  desc: Database operations
-  migrate:
-    desc: Run database migrations
-    script: |
-      case "$environment" in
-        dev)   npm run db:migrate:dev ;;
-        staging) npm run db:migrate:staging ;;
-        prod)  npm run db:migrate:prod ;;
-        *)     echo "Unknown environment" ;;
-      esac
-  seed:
-    desc: Seed database with test data
-    before: echo "Seeding $environment database..."
-    script: npm run "db:seed:$environment"
-    after: echo "Database seeded successfully"
-
-deploy:
-  desc: Deployment operations
-  staging:
-    desc: Deploy to staging
-    script: |
-      npm run build:staging
-      npm run deploy:staging
-  production:
-    desc: Deploy to production
-    args:
-      - confirm|c:bool
-    script: |
-      if [ "$confirm" != "true" ]; then
-        echo "Use --confirm to deploy to production"
-        exit 1
-      fi
-      npm run build:prod
-      npm run deploy:prod
-```
+- **[embedded.yaml](examples/embedded.yaml)** - Full-featured example with native commands, groups, colors, variables, and arguments
+- **[simple-web-project.yaml](examples/simple-web-project.yaml)** - Web development workflow
+- **[devops-infrastructure.yaml](examples/devops-infrastructure.yaml)** - Docker and Kubernetes operations
+- **[go-project.yaml](examples/go-project.yaml)** - Go build, test, and release workflows
+- **[multi-environment.yaml](examples/multi-environment.yaml)** - Environment-specific configurations
 
 ## ⚙️ Configuration
 
@@ -680,13 +496,13 @@ before → script → after → finally
     fallback → finally
 ```
 
-| Stage          | Purpose                                      | Runs on error?                      |
-| -------------- | -------------------------------------------- | ----------------------------------- |
-| **`before`**   | Preparation (compile, check env)             | Skips `script`, triggers `fallback` |
-| **`script`**   | Main command                                 | Triggers `fallback`                 |
-| **`after`**    | Post-success action (notify, log)            | Triggers `fallback`                 |
-| **`fallback`** | Recovery / alternative path (rollback, alert, degrade) | If succeeds, command returns `0`  |
-| **`finally`**  | Cleanup (stop containers, remove temp files) | Always runs                         |
+| Stage          | Purpose                                                | Runs on error?                      |
+| -------------- | ------------------------------------------------------ | ----------------------------------- |
+| **`before`**   | Preparation (compile, check env)                       | Skips `script`, triggers `fallback` |
+| **`script`**   | Main command                                           | Triggers `fallback`                 |
+| **`after`**    | Post-success action (notify, log)                      | Triggers `fallback`                 |
+| **`fallback`** | Recovery / alternative path (rollback, alert, degrade) | If succeeds, command returns `0`    |
+| **`finally`**  | Cleanup (stop containers, remove temp files)           | Always runs                         |
 
 > Return code: `0` if `before`+`script`+`after` succeeded, **or if `fallback` succeeded after a failure**. Otherwise the first error's exit code. `finally` errors are printed to stderr but do not change the return code.
 

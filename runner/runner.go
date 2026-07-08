@@ -11,7 +11,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/quonaro/lota/config"
 	"github.com/quonaro/lota/logger"
@@ -80,6 +82,7 @@ type RunOptions struct {
 	Timeout      time.Duration // 0 means no timeout
 	Logs         []config.LogConfig
 	ShutdownOnce *sync.Once // ensures shutdown message prints only once
+	Stdin        io.Reader  // input reader; defaults to os.Stdin if nil
 	Stdout       io.Writer  // output writer; defaults to os.Stdout if nil
 	Stderr       io.Writer  // error writer; defaults to os.Stderr if nil
 }
@@ -155,6 +158,71 @@ func closeLogFiles(files []*os.File) {
 			_ = f.Close()
 		}
 	}
+}
+
+// isTerminal checks if the reader is a terminal.
+func isTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+
+	var termios syscall.Termios
+	_, _, err := syscall.Syscall6(
+		syscall.SYS_IOCTL,
+		uintptr(f.Fd()),
+		uintptr(syscall.TCGETS),
+		uintptr(unsafe.Pointer(&termios)),
+		0, 0, 0,
+	)
+	return err == 0
+}
+
+// DisableSignalEcho disables the terminal's echo of control characters like ^C.
+// Returns the original termios state for restoration.
+func DisableSignalEcho(f *os.File) (syscall.Termios, error) {
+	var oldState syscall.Termios
+	_, _, errno := syscall.Syscall6(
+		syscall.SYS_IOCTL,
+		uintptr(f.Fd()),
+		uintptr(syscall.TCGETS),
+		uintptr(unsafe.Pointer(&oldState)),
+		0, 0, 0,
+	)
+	if errno != 0 {
+		return oldState, errno
+	}
+
+	newState := oldState
+	// Disable ECHOCTL to prevent ^C from being displayed
+	newState.Lflag &^= syscall.ECHOCTL
+
+	_, _, errno = syscall.Syscall6(
+		syscall.SYS_IOCTL,
+		uintptr(f.Fd()),
+		uintptr(syscall.TCSETS),
+		uintptr(unsafe.Pointer(&newState)),
+		0, 0, 0,
+	)
+	if errno != 0 {
+		return oldState, errno
+	}
+	return oldState, nil
+}
+
+// RestoreTerminal restores the original terminal settings.
+func RestoreTerminal(f *os.File, state syscall.Termios) error {
+	_, _, errno := syscall.Syscall6(
+		syscall.SYS_IOCTL,
+		uintptr(f.Fd()),
+		uintptr(syscall.TCSETS),
+		uintptr(unsafe.Pointer(&state)),
+		0, 0, 0,
+	)
+	if errno != 0 {
+		return errno
+	}
+	return nil
 }
 
 // assignOutput assigns stdout/stderr to cmd, preserving TTY detection when possible.
@@ -263,12 +331,15 @@ func buildLogWriters(logs []config.LogConfig, interpCtx InterpolationContext, ba
 
 // executeShell runs a script in shell with environment variables and optional tee logging.
 // If stdout/stderr are nil, os.Stdout/os.Stderr are used.
-func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string, logs []config.LogConfig, interpCtx InterpolationContext, dryRun bool, stdout, stderr io.Writer, shutdownOnce *sync.Once) error {
+func executeShell(ctx context.Context, script string, env []string, shell string, baseDir, workingDir, dir string, logs []config.LogConfig, interpCtx InterpolationContext, dryRun bool, stdin io.Reader, stdout, stderr io.Writer, shutdownOnce *sync.Once) error {
 	if stdout == nil {
 		stdout = os.Stdout
 	}
 	if stderr == nil {
 		stderr = os.Stderr
+	}
+	if stdin == nil {
+		stdin = os.Stdin
 	}
 
 	// In dry-run mode, only print log targets and skip execution
@@ -299,33 +370,88 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 	cmd := exec.Command(parts[0], append(parts[1:], script)...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = resolveDir(baseDir, workingDir, dir)
+	cmd.Stdin = stdin
 	setupSysProcAttr(cmd)
 
 	logFiles, stdoutWriters, stderrWriters := buildLogWriters(logs, interpCtx, baseDir, dryRun, stdout, stderr)
 	defer closeLogFiles(logFiles)
 
-	needsPTY := len(stdoutWriters) != 1 || stdoutWriters[0] != os.Stdout ||
-		len(stderrWriters) != 1 || stderrWriters[0] != os.Stderr
+	// If stdin is a terminal, use direct I/O for interactive commands (sudo, etc.)
+	// Write script to temp file and execute directly to preserve interactive input
+	if isTerminal(stdin) {
+		tmpFile, err := os.CreateTemp("", "lota-script-*.sh")
+		if err != nil {
+			return fmt.Errorf("create temp script file: %w", err)
+		}
+		tmpPath := tmpFile.Name()
+		// Extract shell name for shebang (e.g., "bash" from "bash -c")
+		shellName := strings.Fields(shell)[0]
+		// Find the actual path to the shell
+		shellPath, err := exec.LookPath(shellName)
+		if err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("find shell %s: %w", shellName, err)
+		}
+		if _, err := tmpFile.WriteString("#!" + shellPath + "\n" + script); err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("write temp script file: %w", err)
+		}
+		if err := tmpFile.Close(); err != nil {
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("close temp script file: %w", err)
+		}
 
-	if needsPTY {
-		stdoutMW := io.MultiWriter(stdoutWriters...)
-		stderrMW := io.MultiWriter(stderrWriters...)
-		used, ptyErr := runWithPTY(cmd, stdoutMW, stderrMW, ctx, shutdownOnce)
-		if !used {
+		// Make executable
+		if err := os.Chmod(tmpPath, 0755); err != nil {
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("chmod temp script file: %w", err)
+		}
+
+		cmd := exec.Command(tmpPath)
+		cmd.Env = append(os.Environ(), env...)
+		cmd.Dir = resolveDir(baseDir, workingDir, dir)
+		cmd.Stdin = stdin
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		cmd.SysProcAttr = nil
+
+		if err = cmd.Start(); err != nil {
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("start command: %w", err)
+		}
+		if err = gracefulWait(cmd, ctx, shutdownOnce, stderr); err != nil {
+			_ = os.Remove(tmpPath)
+			return err
+		}
+		_ = os.Remove(tmpPath)
+	} else {
+		needsPTY := len(stdoutWriters) != 1 || stdoutWriters[0] != os.Stdout ||
+			len(stderrWriters) != 1 || stderrWriters[0] != os.Stderr
+
+		if needsPTY {
+			stdoutMW := io.MultiWriter(stdoutWriters...)
+			stderrMW := io.MultiWriter(stderrWriters...)
+			used, ptyErr := runWithPTY(cmd, stdin, stdoutMW, stderrMW, ctx, shutdownOnce)
+			if !used {
+				assignOutput(cmd, stdoutWriters, stderrWriters)
+				cmd.Stdin = stdin
+				if err = cmd.Start(); err != nil {
+					return fmt.Errorf("start command: %w", err)
+				}
+				err = gracefulWait(cmd, ctx, shutdownOnce, stderr)
+			} else {
+				err = ptyErr
+			}
+		} else {
 			assignOutput(cmd, stdoutWriters, stderrWriters)
+			cmd.Stdin = stdin
 			if err = cmd.Start(); err != nil {
 				return fmt.Errorf("start command: %w", err)
 			}
 			err = gracefulWait(cmd, ctx, shutdownOnce, stderr)
-		} else {
-			err = ptyErr
 		}
-	} else {
-		assignOutput(cmd, stdoutWriters, stderrWriters)
-		if err = cmd.Start(); err != nil {
-			return fmt.Errorf("start command: %w", err)
-		}
-		err = gracefulWait(cmd, ctx, shutdownOnce, stderr)
 	}
 
 	if err != nil {
@@ -358,7 +484,7 @@ func gracefulWait(cmd *exec.Cmd, ctx context.Context, shutdownOnce *sync.Once, s
 	case <-ctx.Done():
 		if shutdownOnce != nil {
 			shutdownOnce.Do(func() {
-				_, _ = fmt.Fprintf(stderr, "\r\033[KReceived signal, shutting down gracefully...\n")
+				_, _ = fmt.Fprintf(stderr, "\r\033[KПользователь запросил завершение выполнения...\n")
 			})
 		}
 		if cmd.Process != nil {
@@ -451,7 +577,7 @@ func executeCommandInternal(ctx context.Context, cmd *config.Command, interpCtx 
 		if opts.DryRun {
 			_, _ = fmt.Fprintf(stdout, "[dry-run] %s:\n%s\n", name, interpolated)
 		}
-		return executeShell(ctx, interpolated, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun, stdout, stderr, opts.ShutdownOnce)
+		return executeShell(ctx, interpolated, env, shell, opts.ConfigDir, opts.WorkingDir, dir, opts.Logs, interpCtx, opts.DryRun, opts.Stdin, stdout, stderr, opts.ShutdownOnce)
 	}
 
 	// before hook

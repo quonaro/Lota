@@ -125,6 +125,7 @@ func Run(ctx context.Context) error {
 		ConfigDir:  configDir,
 		WorkingDir: cwd,
 		Timeout:    flags.Timeout,
+		Stdin:      os.Stdin,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
 		PrefixFormatter: func(path string, cmd *config.Command, groups []*config.Group) string {

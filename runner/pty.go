@@ -17,37 +17,31 @@ import (
 // This preserves ANSI colors from child processes that check isatty.
 // It returns (false, nil) if PTY allocation fails so the caller can fall back
 // to normal pipes.
-func runWithPTY(cmd *exec.Cmd, stdout, stderr io.Writer, ctx context.Context, shutdownOnce *sync.Once) (bool, error) {
-	ptmxOut, ptsOut, err := pty.Open()
+func runWithPTY(cmd *exec.Cmd, stdin io.Reader, stdout, stderr io.Writer, ctx context.Context, shutdownOnce *sync.Once) (bool, error) {
+	ptmx, pts, err := pty.Open()
 	if err != nil {
 		return false, nil
 	}
-	defer func() { _ = ptmxOut.Close() }()
+	defer func() { _ = ptmx.Close() }()
 
-	ptmxErr, ptsErr, err := pty.Open()
-	if err != nil {
-		return false, nil
-	}
-	defer func() { _ = ptmxErr.Close() }()
-
-	cmd.Stdout = ptsOut
-	cmd.Stderr = ptsErr
+	cmd.Stdout = pts
+	cmd.Stderr = pts
+	cmd.Stdin = pts
 
 	if err := cmd.Start(); err != nil {
 		return false, fmt.Errorf("start command: %w", err)
 	}
-	_ = ptsOut.Close()
-	_ = ptsErr.Close()
+	_ = pts.Close()
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(stdout, ptmxOut)
+		_, _ = io.Copy(ptmx, stdin)
 	}()
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(stderr, ptmxErr)
+		_, _ = io.Copy(stdout, ptmx)
 	}()
 
 	err = gracefulWait(cmd, ctx, shutdownOnce, stderr)

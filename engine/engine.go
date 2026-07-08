@@ -22,6 +22,7 @@ type Options struct {
 	ConfigDir       string
 	WorkingDir      string
 	Timeout         time.Duration
+	Stdin           io.Reader
 	Stdout          io.Writer
 	Stderr          io.Writer
 	PrefixFormatter func(path string, cmd *config.Command, groups []*config.Group) string
@@ -42,6 +43,7 @@ func (o Options) toRunOptions() runner.RunOptions {
 		ConfigDir:  o.ConfigDir,
 		WorkingDir: o.WorkingDir,
 		Timeout:    o.Timeout,
+		Stdin:      o.Stdin,
 		Stdout:     o.Stdout,
 		Stderr:     o.Stderr,
 	}

@@ -1,12 +1,9 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g. v1.2.3). Leave empty to auto-detect from commits.'
-        required: false
-        default: ''
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -14,14 +11,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.version.outputs.NEW_TAG }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -29,35 +23,9 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Install cog
-        uses: cocogitto/cocogitto-action@v3
-        with:
-          check: false
-
-      - name: Calculate next version
-        id: version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            INPUT_VERSION="${{ github.event.inputs.version }}"
-            NEW_TAG="v${INPUT_VERSION#v}"
-            echo "Using manually specified version: ${NEW_TAG}"
-          elif ! NEW_TAG=$(cog bump --auto --dry-run); then
-            echo "::error::No feat/fix/breaking commits found since last tag. Merge feature branches into main before releasing."
-            exit 1
-          fi
-          echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_OUTPUT
-          echo "Next version: ${NEW_TAG}"
-
-      - name: Create and push tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a ${{ steps.version.outputs.NEW_TAG }} -m "Release ${{ steps.version.outputs.NEW_TAG }}"
-          git push origin ${{ steps.version.outputs.NEW_TAG }}
-
       - name: Build binaries
         env:
-          VERSION: ${{ steps.version.outputs.NEW_TAG }}
+          VERSION: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
         run: |
           chmod +x ./scripts/build.sh
@@ -67,8 +35,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          tag_name: ${{ steps.version.outputs.NEW_TAG }}
-          name: Release ${{ steps.version.outputs.NEW_TAG }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -102,7 +70,7 @@ jobs:
 
       - name: Update AUR
         env:
-          VERSION: ${{ needs.release.outputs.new_tag }}
+          VERSION: ${{ github.ref_name }}
         run: |
           chmod +x ./scripts/update-aur.sh
           ./scripts/update-aur.sh "${VERSION}"

@@ -10,14 +10,20 @@ type LogConfig struct {
 	Independent bool   `yaml:"independent,omitempty"`
 }
 
+type ImportConfig struct {
+	URL       string `yaml:"url"`
+	Namespace string `yaml:"namespace,omitempty"`
+}
+
 type AppConfig struct {
-	Shell    string     `yaml:"shell,omitempty"`
-	Vars     []Var      `yaml:"vars"`
-	Args     []Arg      `yaml:"-"`
-	RawArgs  []string   `yaml:"args"`
-	Log      *LogConfig `yaml:"log,omitempty"`
-	Groups   []Group    `yaml:"groups"`
-	Commands []Command  `yaml:"commands"`
+	Shell    string         `yaml:"shell,omitempty"`
+	Vars     []Var          `yaml:"vars"`
+	Args     []Arg          `yaml:"-"`
+	RawArgs  []string       `yaml:"args"`
+	Log      *LogConfig     `yaml:"log,omitempty"`
+	Imports  []ImportConfig `yaml:"imports"`
+	Groups   []Group        `yaml:"groups"`
+	Commands []Command      `yaml:"commands"`
 
 	// Indexes
 	commandsMap map[string]*Command

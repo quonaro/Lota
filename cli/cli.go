@@ -3,10 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
-	"github.com/quonaro/lota/config"
-	"github.com/quonaro/lota/engine"
 	"os"
 	"path/filepath"
+
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/engine"
 )
 
 // Run executes the CLI application
@@ -21,6 +22,18 @@ func Run(ctx context.Context) error {
 	flags, remainingArgs, err := ParseGlobalFlags(cliArgs)
 	if err != nil {
 		return err
+	}
+
+	// Handle -G and -U shortcuts
+	if flags.GlobalConfig {
+		flags.Config = "/etc/lota.yml"
+	}
+	if flags.UserConfig {
+		homeDir := os.Getenv("HOME")
+		if homeDir == "" {
+			return fmt.Errorf("HOME environment variable not set")
+		}
+		flags.Config = filepath.Join(homeDir, ".local/share/lota.yml")
 	}
 
 	if shouldExit, err := HandleGlobalFlags(flags); err != nil {

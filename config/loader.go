@@ -3,10 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/quonaro/lota/shared"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/quonaro/lota/shared"
 )
 
 // ErrConfigNotFound is returned when no config file is found in the directory tree
@@ -78,6 +79,13 @@ func GetConfigPath(path string) (*FileConfig, error) {
 		return &FileConfig{Path: configPath}, nil
 	}
 
+	// Handle HTTP/HTTPS URLs
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		// Use cached path
+		cachePath := GetCachePath(path)
+		return &FileConfig{Path: cachePath}, nil
+	}
+
 	if isDir(path) {
 		configPath, err := findConfigFile(path)
 		if err != nil {
@@ -87,4 +95,28 @@ func GetConfigPath(path string) (*FileConfig, error) {
 	}
 
 	return &FileConfig{Path: path}, nil
+}
+
+// ResolveImportPath resolves an import path relative to a base file.
+// If the path is absolute or a URL, it's returned as-is.
+// If the path is relative, it's resolved relative to the base file's directory.
+func ResolveImportPath(importPath, basePath string) string {
+	// URL - return as-is
+	if IsURL(importPath) {
+		return importPath
+	}
+
+	// Absolute path - return as-is
+	if filepath.IsAbs(importPath) {
+		return importPath
+	}
+
+	// Relative path - resolve relative to base file's directory
+	if basePath != "" {
+		baseDir := filepath.Dir(basePath)
+		return filepath.Join(baseDir, importPath)
+	}
+
+	// No base path, return as-is (relative to current dir)
+	return importPath
 }

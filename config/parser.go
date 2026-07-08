@@ -231,11 +231,15 @@ func normalizeImportTags(node *yaml.Node) []string {
 }
 
 func ParseConfigWithWriter(path string, warnTo io.Writer) (*AppConfig, error) {
+	return ParseConfigWithWriterAndImports(path, warnTo, true)
+}
+
+func ParseConfigWithWriterAndImports(path string, warnTo io.Writer, allowImports bool) (*AppConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return ParseConfigFromBytesWithWriter(data, warnTo)
+	return ParseConfigFromBytesWithWriterAndImports(data, warnTo, allowImports, path)
 }
 
 func ParseConfigFromBytes(data []byte) (*AppConfig, error) {
@@ -243,7 +247,11 @@ func ParseConfigFromBytes(data []byte) (*AppConfig, error) {
 }
 
 func ParseConfigFromBytesWithWriter(data []byte, warnTo io.Writer) (*AppConfig, error) {
-	return ParseConfigFromReaderWithWriter(bytes.NewReader(data), warnTo)
+	return ParseConfigFromBytesWithWriterAndImports(data, warnTo, true, "")
+}
+
+func ParseConfigFromBytesWithWriterAndImports(data []byte, warnTo io.Writer, allowImports bool, basePath string) (*AppConfig, error) {
+	return ParseConfigFromReaderWithWriterAndImports(bytes.NewReader(data), warnTo, allowImports, basePath)
 }
 
 func ParseConfigFromReader(r io.Reader) (*AppConfig, error) {
@@ -251,6 +259,10 @@ func ParseConfigFromReader(r io.Reader) (*AppConfig, error) {
 }
 
 func ParseConfigFromReaderWithWriter(r io.Reader, warnTo io.Writer) (*AppConfig, error) {
+	return ParseConfigFromReaderWithWriterAndImports(r, warnTo, true, "")
+}
+
+func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, allowImports bool, basePath string) (*AppConfig, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -310,6 +322,13 @@ func ParseConfigFromReaderWithWriter(r io.Reader, warnTo io.Writer) (*AppConfig,
 				return nil, err
 			}
 			config.Log = logCfg
+		case "imports":
+			if allowImports {
+				if err := valueNode.Decode(&config.Imports); err != nil {
+					return nil, err
+				}
+			}
+			// If allowImports is false, we silently ignore the imports field
 		default:
 			// Distinguish command (has "script" or "native" field) from group
 			if hasField(valueNode, "script") || hasField(valueNode, "native") {

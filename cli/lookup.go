@@ -2,10 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"github.com/quonaro/lota/config"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/quonaro/lota/config"
 )
 
 // LoadConfig loads and indexes the configuration.
@@ -15,6 +16,14 @@ func LoadConfig(configPath string) (*config.AppConfig, error) {
 }
 
 func LoadConfigWithWriter(configPath string, warnTo io.Writer) (*config.AppConfig, error) {
+	// If configPath is a URL, fetch it first
+	if configPath != "" && (config.IsURL(configPath)) {
+		_, err := config.FetchURL(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch config from URL: %w", err)
+		}
+	}
+
 	fc, err := config.GetConfigPath(configPath)
 	if err != nil {
 		return nil, err

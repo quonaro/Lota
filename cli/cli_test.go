@@ -2,10 +2,11 @@ package cli
 
 import (
 	"context"
-	"github.com/quonaro/lota/config"
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/quonaro/lota/config"
 )
 
 func TestParseGlobalFlags(t *testing.T) {
@@ -94,20 +95,26 @@ func TestParseGlobalFlags(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:          "update short flag",
-			input:         []string{"-U"},
-			expectedFlags: GlobalFlags{Update: true},
-			expectedArgs:  []string{},
-		},
-		{
 			name:          "update long flag",
 			input:         []string{"--update"},
 			expectedFlags: GlobalFlags{Update: true},
 			expectedArgs:  []string{},
 		},
 		{
+			name:          "user config short flag",
+			input:         []string{"-u"},
+			expectedFlags: GlobalFlags{UserConfig: true},
+			expectedArgs:  []string{},
+		},
+		{
+			name:          "global config short flag",
+			input:         []string{"-g"},
+			expectedFlags: GlobalFlags{GlobalConfig: true},
+			expectedArgs:  []string{},
+		},
+		{
 			name:    "update with verbose is invalid",
-			input:   []string{"-U", "-v"},
+			input:   []string{"--update", "-v"},
 			wantErr: true,
 		},
 	}

@@ -25,6 +25,12 @@ type Validator interface {
 func (c ConfigValidator) Validate() ValidationResult {
 	result := ValidationResult{}
 
+	// Process imports first
+	if err := ProcessImports(c.AppConfig, c.basePath); err != nil {
+		result.Error = err
+		return result
+	}
+
 	// Expand all variables from env files (app, groups, commands)
 	if err := ExpandAllVars(c.AppConfig, c.basePath); err != nil {
 		// Check if it's a file not found error - treat as warning

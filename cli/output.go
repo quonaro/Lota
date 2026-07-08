@@ -174,6 +174,8 @@ func printGlobalOptions() {
 
 	fmt.Println("  Configuration:")
 	fmt.Printf("    %-20s %s\n", "--config", "Path to config file or directory")
+	fmt.Printf("    %-20s %s\n", "-g", "Use global config (/etc/lota.yml)")
+	fmt.Printf("    %-20s %s\n", "-u", "Use user config (~/.local/share/lota.yml)")
 	fmt.Printf("    %-20s %s\n", "--init", "Create a default lota.yml in current directory")
 	fmt.Println()
 

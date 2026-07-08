@@ -16,6 +16,8 @@ type GlobalFlags struct {
 	DryRun            bool
 	Init              bool
 	Config            string
+	GlobalConfig      bool // -G
+	UserConfig        bool // -U
 	CompletionScript  string
 	InstallCompletion string        // empty means not requested; "auto" means auto-detect shell
 	Timeout           time.Duration // 0 means no timeout
@@ -47,12 +49,16 @@ func ParseGlobalFlags(args []string) (GlobalFlags, []string, error) {
 			flags.VersionLong = true
 		case "-V":
 			flags.VersionShort = true
-		case "--update", "-U":
+		case "--update":
 			flags.Update = true
+		case "-u":
+			flags.UserConfig = true
 		case "--dry-run":
 			flags.DryRun = true
 		case "--init":
 			flags.Init = true
+		case "-g":
+			flags.GlobalConfig = true
 		case "--config":
 			if i+1 >= len(args) {
 				return GlobalFlags{}, nil, fmt.Errorf("flag --config requires a value")
@@ -123,17 +129,26 @@ func hasVerboseFlag(args []string) bool {
 func validateFlags(flags GlobalFlags) error {
 	hasVersion := flags.VersionShort || flags.VersionLong
 
-	if flags.Init && (flags.Help || hasVersion || flags.Update || flags.Verbose || flags.DryRun || flags.CompletionScript != "" || flags.InstallCompletion != "" || flags.Timeout > 0) {
-		return fmt.Errorf("--init cannot be used with --help, --version, --update, --verbose, --dry-run, --completion-script, --install-completion, or --timeout")
+	if flags.Init && (flags.Help || hasVersion || flags.Update || flags.Verbose || flags.DryRun || flags.CompletionScript != "" || flags.InstallCompletion != "" || flags.Timeout > 0 || flags.GlobalConfig || flags.UserConfig) {
+		return fmt.Errorf("--init cannot be used with --help, --version, --update, --verbose, --dry-run, --completion-script, --install-completion, --timeout, -G, or -U")
 	}
-	if flags.CompletionScript != "" && (flags.Help || hasVersion || flags.Update || flags.Init || flags.Verbose || flags.DryRun || flags.InstallCompletion != "" || flags.Timeout > 0) {
-		return fmt.Errorf("--completion-script cannot be used with --help, --version, --update, --init, --verbose, --dry-run, --install-completion, or --timeout")
+	if flags.CompletionScript != "" && (flags.Help || hasVersion || flags.Update || flags.Init || flags.Verbose || flags.DryRun || flags.InstallCompletion != "" || flags.Timeout > 0 || flags.GlobalConfig || flags.UserConfig) {
+		return fmt.Errorf("--completion-script cannot be used with --help, --version, --update, --init, --verbose, --dry-run, --install-completion, --timeout, -G, or -U")
 	}
-	if flags.InstallCompletion != "" && (flags.Help || hasVersion || flags.Update || flags.Init || flags.Verbose || flags.DryRun || flags.CompletionScript != "" || flags.Timeout > 0) {
-		return fmt.Errorf("--install-completion cannot be used with --help, --version, --update, --init, --verbose, --dry-run, --completion-script, or --timeout")
+	if flags.InstallCompletion != "" && (flags.Help || hasVersion || flags.Update || flags.Init || flags.Verbose || flags.DryRun || flags.CompletionScript != "" || flags.Timeout > 0 || flags.GlobalConfig || flags.UserConfig) {
+		return fmt.Errorf("--install-completion cannot be used with --help, --version, --update, --init, --verbose, --dry-run, --completion-script, --timeout, -G, or -U")
 	}
-	if flags.Update && (flags.Help || hasVersion || flags.Init || flags.Verbose || flags.DryRun || flags.CompletionScript != "" || flags.InstallCompletion != "" || flags.Timeout > 0 || flags.Config != "") {
-		return fmt.Errorf("--update cannot be used with --help, --version, --init, --verbose, --dry-run, --completion-script, --install-completion, --timeout, or --config")
+	if flags.Update && (flags.Help || hasVersion || flags.Init || flags.Verbose || flags.DryRun || flags.CompletionScript != "" || flags.InstallCompletion != "" || flags.Timeout > 0 || flags.Config != "" || flags.GlobalConfig || flags.UserConfig) {
+		return fmt.Errorf("--update cannot be used with --help, --version, --init, --verbose, --dry-run, --completion-script, --install-completion, --timeout, --config, -G, or -U")
+	}
+	if flags.GlobalConfig && flags.Config != "" {
+		return fmt.Errorf("-G cannot be used with --config")
+	}
+	if flags.UserConfig && flags.Config != "" {
+		return fmt.Errorf("-U cannot be used with --config")
+	}
+	if flags.GlobalConfig && flags.UserConfig {
+		return fmt.Errorf("-G and -U cannot be used together")
 	}
 	return nil
 }

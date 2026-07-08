@@ -95,12 +95,6 @@ func TestParseGlobalFlags(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:          "update long flag",
-			input:         []string{"--update"},
-			expectedFlags: GlobalFlags{Update: true},
-			expectedArgs:  []string{},
-		},
-		{
 			name:          "user config short flag",
 			input:         []string{"-u"},
 			expectedFlags: GlobalFlags{UserConfig: true},
@@ -111,11 +105,6 @@ func TestParseGlobalFlags(t *testing.T) {
 			input:         []string{"-g"},
 			expectedFlags: GlobalFlags{GlobalConfig: true},
 			expectedArgs:  []string{},
-		},
-		{
-			name:    "update with verbose is invalid",
-			input:   []string{"--update", "-v"},
-			wantErr: true,
 		},
 	}
 

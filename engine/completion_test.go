@@ -64,11 +64,14 @@ func TestAppComplete(t *testing.T) {
 	app, err := NewBuilder("test", []byte(`
 hello:
   desc: Say hello
+  script: echo hello
 help:
   desc: Show help
+  script: echo help
 infra:
   deploy:
     desc: Deploy infra
+    script: echo deploy
 `)).Build()
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)

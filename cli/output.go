@@ -156,33 +156,17 @@ func PrintVersionShort() {
 	fmt.Println(shared.Version)
 }
 
-// printGlobalOptions prints the global options section grouped by category
+// printGlobalOptions prints the global options section
 func printGlobalOptions() {
-	fmt.Println("Global Options:")
-	fmt.Println()
-
-	fmt.Println("  Information:")
-	fmt.Printf("    %-20s %s\n", "-h, --help", "Print help information")
-	fmt.Printf("    %-20s %s\n", "-V, --version", "Print version information")
-	fmt.Println()
-
-	fmt.Println("  Execution:")
-	fmt.Printf("    %-20s %s\n", "-v, --verbose", "Enable detailed logging")
-	fmt.Printf("    %-20s %s\n", "--dry-run", "Show interpolated scripts without executing")
-	fmt.Printf("    %-20s %s\n", "--timeout", "Set execution timeout (e.g. 30s, 1m)")
-	fmt.Println()
-
-	fmt.Println("  Configuration:")
-	fmt.Printf("    %-20s %s\n", "--config", "Path to config file or directory")
-	fmt.Printf("    %-20s %s\n", "-g", "Use global config (/etc/lota.yml)")
-	fmt.Printf("    %-20s %s\n", "-u", "Use user config (~/.local/share/lota.yml)")
-	fmt.Printf("    %-20s %s\n", "--init", "Create a default lota.yml in current directory")
-	fmt.Println()
-
-	fmt.Println("  Maintenance:")
-	fmt.Printf("    %-20s %s\n", "-U, --update", "Update lota to the latest version")
-	fmt.Printf("    %-20s %s\n", "--completion-script [SHELL]", "Print shell completion script")
-	fmt.Printf("    %-20s %s\n", "--install-completion [SHELL]", "Install shell completion (auto-detects if no shell given)")
+	fmt.Println("Options:")
+	fmt.Printf("  %-18s %s\n", "-h, --help", "Show help")
+	fmt.Printf("  %-18s %s\n", "-V, --version", "Show version")
+	fmt.Printf("  %-18s %s\n", "-v, --verbose", "Verbose")
+	fmt.Printf("  %-18s %s\n", "--dry-run", "Dry run")
+	fmt.Printf("  %-18s %s\n", "--timeout DUR", "Timeout")
+	fmt.Printf("  %-18s %s\n", "--config PATH", "Config path")
+	fmt.Printf("  %-18s %s\n", "-g, -u", "Global/user config")
+	fmt.Printf("  %-18s %s\n", "--init", "Create config")
 }
 
 // PrintHelp displays available commands

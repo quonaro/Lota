@@ -215,3 +215,19 @@ func (g *Group) allVarsRecursive() []Var {
 
 	return all
 }
+
+func (c *AppConfig) countTotalCommands() int {
+	count := len(c.Commands)
+	for _, group := range c.Groups {
+		count += group.countCommandsRecursive()
+	}
+	return count
+}
+
+func (g *Group) countCommandsRecursive() int {
+	count := len(g.Commands)
+	for _, sub := range g.Groups {
+		count += sub.countCommandsRecursive()
+	}
+	return count
+}

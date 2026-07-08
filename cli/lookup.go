@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/quonaro/lota/config"
 )
@@ -31,7 +30,7 @@ func LoadConfigWithWriter(configPath string, warnTo io.Writer) (*config.AppConfi
 
 	cfg, err := config.ParseConfigWithWriter(fc.Path, warnTo)
 	if err != nil {
-		return nil, fmt.Errorf("%s:%w", filepath.Base(fc.Path), err)
+		return nil, err
 	}
 
 	// Validates the configuration (includes ExpandAllVars and BuildIndexes)

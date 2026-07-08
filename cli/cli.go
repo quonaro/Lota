@@ -35,7 +35,7 @@ func Run(ctx context.Context) error {
 	if flags.UserConfig {
 		homeDir := os.Getenv("HOME")
 		if homeDir == "" {
-			return fmt.Errorf("HOME environment variable not set")
+			return fmt.Errorf("HOME environment variable is not set")
 		}
 		flags.Config = filepath.Join(homeDir, ".local/share/lota.yml")
 	}
@@ -53,19 +53,24 @@ func Run(ctx context.Context) error {
 	}
 
 	if len(remainingArgs) == 0 {
+		// If -g or -u is used without a command, show help without loading config
+		if flags.GlobalConfig || flags.UserConfig {
+			printGlobalOptions()
+			return nil
+		}
 		PrintHelp(flags.Config)
 		return nil
 	}
 
 	cfg, err := LoadConfig(flags.Config)
 	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 	logger.Debugf("cli: config loaded successfully")
 
 	fc, err := config.GetConfigPath(flags.Config)
 	if err != nil {
-		return fmt.Errorf("error resolving config path: %w", err)
+		return fmt.Errorf("failed to resolve config path: %w", err)
 	}
 	configDir := filepath.Dir(fc.Path)
 
@@ -110,7 +115,7 @@ func Run(ctx context.Context) error {
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
+		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 	logger.Debugf("cli: working directory: %s", cwd)
 

@@ -2,8 +2,9 @@ package runner
 
 import (
 	"fmt"
-	"github.com/quonaro/lota/config"
 	"strings"
+
+	"github.com/quonaro/lota/config"
 )
 
 const defaultMaxArrayElements = 5
@@ -51,7 +52,7 @@ func ParseArgs(cliArgs []string, argDefs []config.Arg) (map[string]string, error
 		if arg == "--" {
 			i++
 			if wildcardArg == nil {
-				return nil, fmt.Errorf("unexpected argument separator '--'")
+				return nil, fmt.Errorf("unexpected '--' separator: no wildcard argument defined")
 			}
 			wildcardValues := make([]string, 0, len(cliArgs)-i)
 			for i < len(cliArgs) {

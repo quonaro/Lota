@@ -52,11 +52,11 @@ func LoadConfig(data []byte) (*config.AppConfig, error) {
 	logger.Debug("engine: loading config from bytes")
 	cfg, err := config.ParseConfigFromBytes(data)
 	if err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	if err := cfg.BuildIndexes(); err != nil {
-		return nil, fmt.Errorf("build indexes: %w", err)
+		return nil, fmt.Errorf("failed to build indexes: %w", err)
 	}
 	logger.Debug("engine: indexes built successfully")
 
@@ -75,12 +75,12 @@ func LoadConfig(data []byte) (*config.AppConfig, error) {
 func LoadConfigFromPath(path string) (*config.AppConfig, string, error) {
 	fc, err := config.GetConfigPath(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("resolve config path: %w", err)
+		return nil, "", fmt.Errorf("failed to resolve config path: %w", err)
 	}
 
 	cfg, err := config.ParseConfigWithWriter(fc.Path, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("parse config: %w", err)
+		return nil, "", fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	validator := config.GetValidator(cfg, fc.Path)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -45,6 +46,12 @@ func (c ConfigValidator) Validate() ValidationResult {
 	// Build indexes
 	if err := c.BuildIndexes(); err != nil {
 		result.Error = err
+		return result
+	}
+
+	// Check if config has any commands
+	if c.countTotalCommands() == 0 {
+		result.Error = fmt.Errorf("config file contains no commands. Add at least one command to your lota.yml")
 		return result
 	}
 

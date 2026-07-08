@@ -164,7 +164,7 @@ func minInt(a, b, c int) int {
 
 func parseLogConfig(node *yaml.Node, allowIndependent bool, context string) (*LogConfig, error) {
 	if node.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%d: expected mapping node for log, got %s", node.Line, nodeKindName(node.Kind))
+		return nil, fmt.Errorf("log configuration must be a mapping (key-value) block at line %d, got %s", node.Line, nodeKindName(node.Kind))
 	}
 
 	var cfg LogConfig
@@ -177,9 +177,9 @@ func parseLogConfig(node *yaml.Node, allowIndependent bool, context string) (*Lo
 		if !validLogFields[key] {
 			suggestion := suggestField(key, []string{"path", "truncate", "independent"})
 			if suggestion != "" {
-				return nil, fmt.Errorf("%d: unknown field %q in log %s\nDid you mean: %s?", node.Content[i].Line, key, context, suggestion)
+				return nil, fmt.Errorf("unknown field %q in log %s at line %d. Did you mean: %s?", key, context, node.Content[i].Line, suggestion)
 			}
-			return nil, fmt.Errorf("%d: unknown field %q in log %s", node.Content[i].Line, key, context)
+			return nil, fmt.Errorf("unknown field %q in log %s at line %d", key, context, node.Content[i].Line)
 		}
 
 		switch key {
@@ -188,23 +188,23 @@ func parseLogConfig(node *yaml.Node, allowIndependent bool, context string) (*Lo
 		case "truncate":
 			var t bool
 			if err := valueNode.Decode(&t); err != nil {
-				return nil, fmt.Errorf("%d: invalid truncate in log %s: %w", valueNode.Line, context, err)
+				return nil, fmt.Errorf("invalid truncate value in log %s at line %d: %w", context, valueNode.Line, err)
 			}
 			cfg.Truncate = t
 		case "independent":
 			var ind bool
 			if err := valueNode.Decode(&ind); err != nil {
-				return nil, fmt.Errorf("%d: invalid independent in log %s: %w", valueNode.Line, context, err)
+				return nil, fmt.Errorf("invalid independent value in log %s at line %d: %w", context, valueNode.Line, err)
 			}
 			if ind && !allowIndependent {
-				return nil, fmt.Errorf("%d: independent is not allowed in root-level log", valueNode.Line)
+				return nil, fmt.Errorf("independent is not allowed")
 			}
 			cfg.Independent = ind
 		}
 	}
 
 	if cfg.Path == "" {
-		return nil, fmt.Errorf("%d: log %s requires a path", node.Line, context)
+		return nil, fmt.Errorf("log %s at line %d requires a path field", context, node.Line)
 	}
 
 	return &cfg, nil
@@ -284,7 +284,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 	}
 
 	if root.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%d: expected mapping node, got %s", root.Line, nodeKindName(root.Kind))
+		return nil, fmt.Errorf("config file must be a mapping (key-value) block at line %d, got %s", root.Line, nodeKindName(root.Kind))
 	}
 
 	deprecatedTags := normalizeImportTags(root)
@@ -308,17 +308,17 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 		case "vars":
 			logger.Debug("config: parsing vars")
 			if err := valueNode.Decode(&config.Vars); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse vars at line %d: %w", valueNode.Line, err)
 			}
 		case "args":
 			logger.Debug("config: parsing args")
 			if err := valueNode.Decode(&config.RawArgs); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse args at line %d: %w", valueNode.Line, err)
 			}
 			config.Args = make([]Arg, len(config.RawArgs))
 			for j, arg := range config.RawArgs {
 				if err := config.Args[j].Parse(arg); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to parse arg %q at line %d: %w", arg, valueNode.Line, err)
 				}
 			}
 		case "shell":
@@ -332,7 +332,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 		case "imports":
 			if allowImports {
 				if err := valueNode.Decode(&config.Imports); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to parse imports at line %d: %w", valueNode.Line, err)
 				}
 			}
 			// If allowImports is false, we silently ignore the imports field
@@ -343,7 +343,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 				var cmd Command
 				cmd.Name = key
 				if err := valueNode.Decode(&cmd); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to parse command %q at line %d: %w", key, valueNode.Line, err)
 				}
 				config.Commands = append(config.Commands, cmd)
 			} else {
@@ -351,7 +351,7 @@ func ParseConfigFromReaderWithWriterAndImports(r io.Reader, warnTo io.Writer, al
 				var group Group
 				group.Name = key
 				if err := valueNode.Decode(&group); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to parse group %q at line %d: %w", key, valueNode.Line, err)
 				}
 				config.Groups = append(config.Groups, group)
 			}
@@ -375,7 +375,7 @@ func (g *Group) tryParseNestedCommandOrGroup(key string, valueNode *yaml.Node, l
 	if hasField(valueNode, "script") || hasField(valueNode, "native") {
 		var cmd Command
 		if err := valueNode.Decode(&cmd); err != nil {
-			return false, fmt.Errorf("%d: error parsing command %q in group %q: %w", line, key, g.Name, err)
+			return false, fmt.Errorf("failed to parse command %q in group %q at line %d: %w", key, g.Name, line, err)
 		}
 		cmd.Name = key
 		g.Commands = append(g.Commands, cmd)
@@ -383,7 +383,7 @@ func (g *Group) tryParseNestedCommandOrGroup(key string, valueNode *yaml.Node, l
 	}
 	var sub Group
 	if err := valueNode.Decode(&sub); err != nil {
-		return false, fmt.Errorf("%d: error parsing nested group %q in group %q: %w", line, key, g.Name, err)
+		return false, fmt.Errorf("failed to parse nested group %q in group %q at line %d: %w", key, g.Name, line, err)
 	}
 	sub.Name = key
 	g.Groups = append(g.Groups, sub)
@@ -393,7 +393,7 @@ func (g *Group) tryParseNestedCommandOrGroup(key string, valueNode *yaml.Node, l
 func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 	logger.Debugf("config: unmarshaling group: %s", g.Name)
 	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("%d: expected mapping node for group, got %s", node.Line, nodeKindName(node.Kind))
+		return fmt.Errorf("group %q must be a mapping (key-value) block at line %d, got %s", g.Name, node.Line, nodeKindName(node.Kind))
 	}
 
 	g.Commands = make([]Command, 0)
@@ -428,7 +428,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 			}
 			g.Color = valueNode.Value
 			if !isValidColor(g.Color) {
-				return fmt.Errorf("%d: invalid color %q for group %q\nAvailable colors: %s", valueNode.Line, g.Color, g.Name, validColorsList())
+				return fmt.Errorf("invalid color %q for group %q at line %d. Available colors: %s", g.Color, g.Name, valueNode.Line, validColorsList())
 			}
 		case "inherit_color":
 			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
@@ -439,7 +439,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 			}
 			var inherit bool
 			if err := valueNode.Decode(&inherit); err != nil {
-				return fmt.Errorf("%d: invalid inherit_color for group %q: %w", valueNode.Line, g.Name, err)
+				return fmt.Errorf("invalid inherit_color value for group %q at line %d: %w", g.Name, valueNode.Line, err)
 			}
 			g.InheritColor = &inherit
 		case "show":
@@ -451,7 +451,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 			}
 			var show bool
 			if err := valueNode.Decode(&show); err != nil {
-				return fmt.Errorf("%d: invalid show value for group %q: %w", valueNode.Line, g.Name, err)
+				return fmt.Errorf("invalid show value for group %q at line %d: %w", g.Name, valueNode.Line, err)
 			}
 			g.Show = &show
 		case "vars":
@@ -462,7 +462,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 				continue
 			}
 			if err := valueNode.Decode(&g.Vars); err != nil {
-				return fmt.Errorf("%d: error parsing vars in group %q: %w", valueNode.Line, g.Name, err)
+				return fmt.Errorf("failed to parse vars in group %q at line %d: %w", g.Name, valueNode.Line, err)
 			}
 		case "args":
 			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
@@ -472,12 +472,12 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 				continue
 			}
 			if err := valueNode.Decode(&g.RawArgs); err != nil {
-				return fmt.Errorf("%d: error parsing args in group %q: %w", valueNode.Line, g.Name, err)
+				return fmt.Errorf("failed to parse args in group %q at line %d: %w", g.Name, valueNode.Line, err)
 			}
 			g.Args = make([]Arg, len(g.RawArgs))
 			for j, arg := range g.RawArgs {
 				if err := g.Args[j].Parse(arg); err != nil {
-					return fmt.Errorf("%d: invalid arg %q in group %q: %w", valueNode.Line, arg, g.Name, err)
+					return fmt.Errorf("invalid arg %q in group %q at line %d: %w", arg, g.Name, valueNode.Line, err)
 				}
 			}
 		case "shell":
@@ -504,14 +504,14 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 			if valueNode.Kind != yaml.MappingNode {
 				suggestion := suggestField(key, groupFields)
 				if suggestion != "" {
-					return fmt.Errorf("%d: unknown field %q in group %q\nDid you mean: %s?", node.Content[i].Line, key, g.Name, suggestion)
+					return fmt.Errorf("unknown field %q in group %q at line %d. Did you mean: %s?", key, g.Name, node.Content[i].Line, suggestion)
 				}
-				return fmt.Errorf("%d: unknown field %q in group %q (expected mapping for nested group, got %s)",
-					node.Content[i].Line, key, g.Name, nodeKindName(valueNode.Kind))
+				return fmt.Errorf("unknown field %q in group %q at line %d (expected mapping for nested group, got %s)",
+					key, g.Name, node.Content[i].Line, nodeKindName(valueNode.Kind))
 			}
 			var sub Group
 			if err := valueNode.Decode(&sub); err != nil {
-				return fmt.Errorf("%d: error parsing nested group %q in group %q: %w", node.Content[i].Line, key, g.Name, err)
+				return fmt.Errorf("failed to parse nested group %q in group %q at line %d: %w", key, g.Name, node.Content[i].Line, err)
 			}
 			sub.Name = key
 			g.Groups = append(g.Groups, sub)
@@ -524,7 +524,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 	logger.Debugf("config: unmarshaling command: %s", c.Name)
 	if node.Kind != yaml.MappingNode {
-		return fmt.Errorf("%d: expected mapping node for command, got %s", node.Line, nodeKindName(node.Kind))
+		return fmt.Errorf("command %q must be a mapping (key-value) block at line %d, got %s", c.Name, node.Line, nodeKindName(node.Kind))
 	}
 
 	for i := 0; i < len(node.Content); i += 2 {
@@ -538,32 +538,32 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 		case "color":
 			c.Color = valueNode.Value
 			if !isValidColor(c.Color) {
-				return fmt.Errorf("%d: invalid color %q for command %q\nAvailable colors: %s", valueNode.Line, c.Color, c.Name, validColorsList())
+				return fmt.Errorf("invalid color %q for command %q at line %d. Available colors: %s", c.Color, c.Name, valueNode.Line, validColorsList())
 			}
 		case "inherit_color":
 			var inherit bool
 			if err := valueNode.Decode(&inherit); err != nil {
-				return fmt.Errorf("%d: invalid inherit_color for command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("invalid inherit_color value for command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 			c.InheritColor = &inherit
 		case "show":
 			var show bool
 			if err := valueNode.Decode(&show); err != nil {
-				return fmt.Errorf("%d: invalid show value for command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("invalid show value for command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 			c.Show = &show
 		case "vars":
 			if err := valueNode.Decode(&c.Vars); err != nil {
-				return fmt.Errorf("%d: error parsing vars in command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("failed to parse vars in command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 		case "args":
 			if err := valueNode.Decode(&c.RawArgs); err != nil {
-				return fmt.Errorf("%d: error parsing args in command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("failed to parse args in command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 			c.Args = make([]Arg, len(c.RawArgs))
 			for j, arg := range c.RawArgs {
 				if err := c.Args[j].Parse(arg); err != nil {
-					return fmt.Errorf("%d: invalid arg %q in command %q: %w", valueNode.Line, arg, c.Name, err)
+					return fmt.Errorf("invalid arg %q in command %q at line %d: %w", arg, c.Name, valueNode.Line, err)
 				}
 			}
 		case "script":
@@ -579,17 +579,17 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 		case "native":
 			var native bool
 			if err := valueNode.Decode(&native); err != nil {
-				return fmt.Errorf("%d: invalid native value in command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("invalid native value for command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 			c.Native = native
 		case "depends":
 			if err := valueNode.Decode(&c.Depends); err != nil {
-				return fmt.Errorf("%d: error parsing depends in command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("failed to parse depends in command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 		case "parallel":
 			var parallel bool
 			if err := valueNode.Decode(&parallel); err != nil {
-				return fmt.Errorf("%d: invalid parallel value in command %q: %w", valueNode.Line, c.Name, err)
+				return fmt.Errorf("invalid parallel value for command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
 			c.Parallel = &parallel
 		case "log":
@@ -601,9 +601,9 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 		default:
 			suggestion := suggestField(key, commandFields)
 			if suggestion != "" {
-				return fmt.Errorf("%d: unknown field %q in command %q\nDid you mean: %s?", node.Content[i].Line, key, c.Name, suggestion)
+				return fmt.Errorf("unknown field %q in command %q at line %d. Did you mean: %s?", key, c.Name, node.Content[i].Line, suggestion)
 			}
-			return fmt.Errorf("%d: unknown field %q in command %q", node.Content[i].Line, key, c.Name)
+			return fmt.Errorf("unknown field %q in command %q at line %d", key, c.Name, node.Content[i].Line)
 		}
 	}
 

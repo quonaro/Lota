@@ -29,12 +29,12 @@ func loadYAMLFile(basePath, path, prefix string) (map[string]string, error) {
 
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("yaml file not found: %s", fullPath)
+		return nil, fmt.Errorf("cannot read file %s: %w", fullPath, err)
 	}
 
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, fmt.Errorf("failed to parse yaml: %w", err)
+		return nil, fmt.Errorf("invalid YAML syntax in %s: %w", fullPath, err)
 	}
 
 	// Unwrap Document node
@@ -63,7 +63,7 @@ func loadYAMLFile(basePath, path, prefix string) (map[string]string, error) {
 // findSection navigates to a subsection in the YAML tree using dot notation (e.g., "public", "database.connection").
 func findSection(node *yaml.Node, section string) (*yaml.Node, error) {
 	if node.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("cannot select section %q: not a mapping node", section)
+		return nil, fmt.Errorf("section %q must be a mapping (key-value) block, not %s", section, nodeKindName(node.Kind))
 	}
 
 	parts := strings.Split(section, ".")
@@ -80,7 +80,7 @@ func findSection(node *yaml.Node, section string) (*yaml.Node, error) {
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("section %q not found in yaml", section)
+			return nil, fmt.Errorf("section %q not found in file", section)
 		}
 	}
 
@@ -119,7 +119,7 @@ func flattenYAMLNode(node *yaml.Node, prefix string, result map[string]string) e
 	case yaml.ScalarNode:
 		result[prefix] = node.Value
 	default:
-		return fmt.Errorf("unsupported yaml node kind: %d", node.Kind)
+		return fmt.Errorf("unsupported YAML structure: %s", nodeKindName(node.Kind))
 	}
 
 	return nil

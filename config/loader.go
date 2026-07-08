@@ -70,7 +70,7 @@ func findConfigFile(dir string) (string, error) {
 		dir = parent
 	}
 
-	return "", fmt.Errorf("%w (checked: %s)", ErrConfigNotFound, strings.Join(checked, ", "))
+	return "", fmt.Errorf("config file not found in directory tree (searched in: %s): %w", strings.Join(checked, ", "), ErrConfigNotFound)
 }
 
 func GetConfigPath(path string) (*FileConfig, error) {

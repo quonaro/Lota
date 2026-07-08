@@ -11,9 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/quonaro/lota/config"
 	"github.com/quonaro/lota/logger"
@@ -158,71 +156,6 @@ func closeLogFiles(files []*os.File) {
 			_ = f.Close()
 		}
 	}
-}
-
-// isTerminal checks if the reader is a terminal.
-func isTerminal(r io.Reader) bool {
-	f, ok := r.(*os.File)
-	if !ok {
-		return false
-	}
-
-	var termios syscall.Termios
-	_, _, err := syscall.Syscall6(
-		syscall.SYS_IOCTL,
-		uintptr(f.Fd()),
-		uintptr(syscall.TCGETS),
-		uintptr(unsafe.Pointer(&termios)),
-		0, 0, 0,
-	)
-	return err == 0
-}
-
-// DisableSignalEcho disables the terminal's echo of control characters like ^C.
-// Returns the original termios state for restoration.
-func DisableSignalEcho(f *os.File) (syscall.Termios, error) {
-	var oldState syscall.Termios
-	_, _, errno := syscall.Syscall6(
-		syscall.SYS_IOCTL,
-		uintptr(f.Fd()),
-		uintptr(syscall.TCGETS),
-		uintptr(unsafe.Pointer(&oldState)),
-		0, 0, 0,
-	)
-	if errno != 0 {
-		return oldState, errno
-	}
-
-	newState := oldState
-	// Disable ECHOCTL to prevent ^C from being displayed
-	newState.Lflag &^= syscall.ECHOCTL
-
-	_, _, errno = syscall.Syscall6(
-		syscall.SYS_IOCTL,
-		uintptr(f.Fd()),
-		uintptr(syscall.TCSETS),
-		uintptr(unsafe.Pointer(&newState)),
-		0, 0, 0,
-	)
-	if errno != 0 {
-		return oldState, errno
-	}
-	return oldState, nil
-}
-
-// RestoreTerminal restores the original terminal settings.
-func RestoreTerminal(f *os.File, state syscall.Termios) error {
-	_, _, errno := syscall.Syscall6(
-		syscall.SYS_IOCTL,
-		uintptr(f.Fd()),
-		uintptr(syscall.TCSETS),
-		uintptr(unsafe.Pointer(&state)),
-		0, 0, 0,
-	)
-	if errno != 0 {
-		return errno
-	}
-	return nil
 }
 
 // assignOutput assigns stdout/stderr to cmd, preserving TTY detection when possible.
@@ -378,7 +311,7 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 
 	// If stdin is a terminal, use direct I/O for interactive commands (sudo, etc.)
 	// Write script to temp file and execute directly to preserve interactive input
-	if isTerminal(stdin) {
+	if IsTerminal(stdin) {
 		tmpFile, err := os.CreateTemp("", "lota-script-*.sh")
 		if err != nil {
 			return fmt.Errorf("create temp script file: %w", err)

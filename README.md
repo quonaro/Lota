@@ -4,19 +4,24 @@ A configurable task runner for rapid development. Define commands in a YAML file
 
 ## Features
 
-- ✨ **Configurable tasks** - Define tasks in YAML, no code needed
-- 🔧 **Flexible arguments** - Positional, flags, wildcards, arrays with type validation
-- 🔄 **Variable interpolation** - Environment variables with hierarchical scoping
-- 🐚 **Shell-aware execution** - Auto-detects shell binary, overridable at any level
-- 👁️ **Dry-run mode** - Preview commands before execution
-- 🛡️ **Graceful shutdown** - Proper process management on interrupt signals
-- 📄 **Env file imports** - Load variables from .env files
-- 📊 **YAML config imports** - Import nested YAML configs with dot-notation access
-- 📂 **Nested groups** - Organize commands in hierarchical groups
-- 📁 **Working directory** - Set `dir` per command or group (relative to `lota.yml`)
-- � **Tee logging** - Write stdout/stderr to files while still printing to terminal
-- � **Command dependencies** - `depends` for automatic prerequisite execution with cycle detection
-- 🔍 **Upward config search** - Find `lota.yml` in parent directories up to the git root
+- ✨ **Configurable tasks** — Define tasks and command groups in a single `lota.yml`. No code required: commands, arguments, variables, dependencies and execution hooks are all declared in YAML.
+- 🔧 **Flexible arguments** — Support positional arguments, named flags (`-f`/`--flag`), boolean flags with negation (`--!verbose`), wildcard capture (`...args`) and typed arrays (`files:arr[5]`). CLI values are validated and exported as environment variables.
+- 🔄 **Variable interpolation** — Inject variables and arguments into scripts with `$name`. Scopes follow app → group → command, so local definitions naturally override global ones.
+- 🐚 **Shell-aware execution** — Auto-detects the system shell and falls back to `bash` if unsure. Override the shell per app, group or command. Supports bash, zsh, fish, sh, dash and others.
+- 👁️ **Dry-run mode** — Run with `--dry-run` to print the exact scripts and resolved environment without executing them.
+- 🛡️ **Graceful shutdown** — `SIGINT`/`SIGTERM` are propagated to child processes with a graceful period before forced termination.
+- 📄 **Env file imports** — Load variables from `.env` files via `import:env .env` inside `vars`.
+- 📊 **YAML config imports** — Import nested YAML files as variables with `import:yaml <file>[@section] [prefix]` and access flattened keys like `${app.database.host}`.
+- 📂 **Nested groups** — Organize commands in hierarchical groups (`lota infra docker up`) with arbitrary nesting depth.
+- 📁 **Working directory** — Set `dir` per group or command. Relative paths resolve against the config file; use `$CWD` to run from the current directory.
+- 📝 **Tee logging** — Mirror command output to log files while still printing to the terminal. Logs are inherited down the group tree and can be made `independent`.
+- 🔗 **Command dependencies** — Declare `depends` with full dot-paths. Independent dependencies run in parallel by default, shared ones run once, and circular dependencies are detected automatically.
+- 🔍 **Upward config search** — Run commands from any subdirectory: Lota walks up to the git root looking for `lota.yml`/`lota.yaml`.
+- 🎨 **Colored help** — Highlight group and command names with named ANSI colors or hex values (e.g. `#FF5733`).
+- ⏱️ **Command timeout** — Set a per-run timeout with `--timeout 5m`.
+- 🧩 **Execution hooks** — Build pipelines with `before`, `script`, `after`, `fallback` and `finally` stages.
+- 🧱 **Native commands** — Embed Lota as a Go library and register Go functions as handlers for `native: true` commands.
+- 🎯 **Shell completion** — Built-in completion for bash, zsh and fish.
 
 ## 📦 Installation
 
@@ -49,12 +54,12 @@ git clone https://github.com/quonaro/lota.git
 cd lota && go build -o lota . && sudo mv lota /usr/local/bin/
 ```
 
-## � Documentation
+## 📚 Documentation
 
 - **[Embedding Guide](docs/EMBEDDING.md)** - How to embed Lota in your Go application
 - **[Examples](examples/)** - Complete configuration examples for various use cases
 
-## �🚀 Quick Start
+## 🚀 Quick Start
 
 Initialize a new configuration:
 
@@ -102,6 +107,11 @@ lota dev test
 | Upward config search      | ✅   | ❌   | ❌   | ❌          |
 | Env file imports          | ✅   | ✅   | ❌   | ❌          |
 | Shell auto-detection      | ✅   | ❌   | ❌   | ❌          |
+| Dry-run mode              | ✅   | ✅   | ❌   | ❌          |
+| Tee logging               | ✅   | ❌   | ❌   | ❌          |
+| Execution hooks           | ✅   | ❌   | ❌   | ❌          |
+| Native Go commands        | ✅   | ❌   | ❌   | ❌          |
+| Config file imports       | ✅   | ✅   | ❌   | ❌          |
 
 ### Syntax Comparison
 
@@ -200,6 +210,10 @@ vars: # global environment variables
 args: # global argument definitions
   - name:type=default
 
+imports: # optional: import other config files / URLs
+  - url: extra.yaml
+    namespace: ext # optional; wraps imported commands/groups under `ext:`
+
 group-name: # command group
   desc: ...
   color: cyan # Optional: highlight group name in help
@@ -297,7 +311,7 @@ vars:
   app.database.port: "5432"
 ```
 
-Access in scripts: `$app_app_name`, `$app_database_host`
+Access in scripts: `${app.app_name}`, `${app.database.host}`
 
 ### 🎯 Arguments (`args`)
 
@@ -432,7 +446,7 @@ backend:
     script: go test ./...
 ```
 
-Priority: **command > group > cwd**. Useful in monorepos where different commands run in different subprojects.
+Priority: **command > group > config file dir**. Use `$CWD` or `$CWD/...` to target the current working directory. Useful in monorepos where different commands run in different subprojects.
 
 ### 🔗 Command Dependencies (`depends`)
 
@@ -546,8 +560,8 @@ deploy:
 ```
 
 **Happy path:** before → script → after → finally → return 0
-**Script fails:** before → script (fail) → fallback → finally → return 1
-**After fails:** before → script → after (fail) → fallback → finally → return 1
+**Script fails:** before → script (fail) → fallback → finally → return 0 (if fallback succeeds)
+**After fails:** before → script → after (fail) → fallback → finally → return 0 (if fallback succeeds)
 
 #### Example 4: Full Pipeline — Database Migration
 
@@ -690,6 +704,9 @@ Color resolution priority: **direct `color` > inherited `color` > default**. `in
 | `--dry-run`                            | Show commands without executing                      |
 | `--init`                               | Create a template lota.yml                           |
 | `--config`                             | Specify config file or directory                     |
+| `-g`                                   | Use system-wide config (`/etc/lota.yml`)             |
+| `-u`                                   | Use user config (`~/.local/share/lota.yml`)          |
+| `--timeout <duration>`                 | Set a command timeout (e.g. `30s`, `5m`)             |
 | `--install-completion`                 | Install shell completion script (auto-detects shell) |
 | `--install-completion zsh\|bash\|fish` | Install completion for a specific shell              |
 | `--completion-script zsh\|bash\|fish`  | Print completion script to stdout                    |
@@ -744,7 +761,7 @@ unset COMP_LINE COMP_POINT
 
 Then regenerate and reinstall the completion script for your shell.
 
-## �� Upward Config Search
+## 🔍 Upward Config Search
 
 If `lota.yml` is not found in the current directory, Lota searches upward through parent directories until it finds one or reaches the git root (`.git` directory) or the filesystem root (`/`).
 
@@ -785,15 +802,17 @@ Install git hooks for commit validation and code quality:
 # Install pre-commit
 pip install pre-commit
 
-# Install git hooks
-./scripts/install-hooks.sh
+# Install pre-commit hooks
+pre-commit install
+
+# Install commit-msg hook (for conventional commits)
+pre-commit install --hook-type commit-msg
 ```
 
 This installs:
 
-- **commit-msg hook** - validates conventional commits via cocogitto
-- **post-commit hook** - automatic version tagging
 - **pre-commit hooks** - runs go fmt, go vet, go test, and golangci-lint
+- **commit-msg hook** - validates conventional commits via cocogitto
 
 ### Manual Pre-commit
 
@@ -839,7 +858,8 @@ Lota follows a strict layered architecture:
 
 - **config/** - YAML parsing and configuration models
 - **runner/** - Command execution, argument parsing, interpolation
-- **cli/** - CLI orchestration (only orchestrates, doesn't import runner)
+- **engine/** - High-level orchestration used by the CLI and embedded Go API
+- **cli/** - CLI orchestration (binds config and engine; does not import runner directly)
 - **shared/** - Constants and shared utilities
 
 Key design principles:

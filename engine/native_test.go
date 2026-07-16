@@ -245,3 +245,21 @@ app:
 		t.Fatalf("expected app-deploy output, got: %q", stdout.String())
 	}
 }
+
+func TestNativeNilHandlers_ExplainsEmbedding(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{{Name: "native-cmd", Native: true}},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	app := &App{cfg: cfg, opts: Options{NativeHandlers: nil}, natives: nil}
+	err := app.Run(context.Background(), []string{"native-cmd"})
+	if err == nil {
+		t.Fatal("expected error for native command with nil handlers")
+	}
+	if !strings.Contains(err.Error(), "embedded as a Go library") {
+		t.Fatalf("expected embedding explanation, got: %v", err)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/quonaro/lota/internal/levenshtein"
 	"github.com/quonaro/lota/logger"
 	"gopkg.in/yaml.v3"
 )
@@ -100,7 +101,7 @@ func suggestField(unknown string, valid []string) string {
 	best := ""
 	bestScore := 9999
 	for _, v := range valid {
-		dist := levenshteinDistance(unknown, v)
+		dist := levenshtein.Distance(unknown, v)
 		if dist < bestScore {
 			bestScore = dist
 			best = v
@@ -115,51 +116,6 @@ func suggestField(unknown string, valid []string) string {
 		return best
 	}
 	return ""
-}
-
-func levenshteinDistance(a, b string) int {
-	if a == b {
-		return 0
-	}
-	if len(a) == 0 {
-		return len(b)
-	}
-	if len(b) == 0 {
-		return len(a)
-	}
-
-	prev := make([]int, len(b)+1)
-	curr := make([]int, len(b)+1)
-	for j := 0; j <= len(b); j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= len(a); i++ {
-		curr[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 0
-			if a[i-1] != b[j-1] {
-				cost = 1
-			}
-			insertion := curr[j-1] + 1
-			deletion := prev[j] + 1
-			substitution := prev[j-1] + cost
-			curr[j] = minInt(insertion, deletion, substitution)
-		}
-		prev, curr = curr, prev
-	}
-
-	return prev[len(b)]
-}
-
-func minInt(a, b, c int) int {
-	if a <= b && a <= c {
-		return a
-	}
-	if b <= c {
-		return b
-	}
-	return c
 }
 
 func parseLogConfig(node *yaml.Node, allowIndependent bool, context string) (*LogConfig, error) {

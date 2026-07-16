@@ -21,7 +21,7 @@ type NativeFunc func(ctx context.Context, nctx NativeContext) error
 // The handler is looked up in the per-app natives map by its full command path.
 func runNative(ctx context.Context, name string, nctx NativeContext, natives map[string]NativeFunc) error {
 	if natives == nil {
-		return fmt.Errorf("native command %q has no registered handler", name)
+		return fmt.Errorf("native command %q has no registered handler (native commands are only supported when Lota is embedded as a Go library)", name)
 	}
 	fn, ok := natives[name]
 	if !ok {

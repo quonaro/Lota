@@ -417,7 +417,7 @@ func gracefulWait(cmd *exec.Cmd, ctx context.Context, shutdownOnce *sync.Once, s
 	case <-ctx.Done():
 		if shutdownOnce != nil {
 			shutdownOnce.Do(func() {
-				_, _ = fmt.Fprintf(stderr, "\r\033[KПользователь запросил завершение выполнения...\n")
+				_, _ = fmt.Fprintf(stderr, "\r\033[KUser requested shutdown...\n")
 			})
 		}
 		if cmd.Process != nil {

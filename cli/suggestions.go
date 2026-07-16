@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"github.com/quonaro/lota/config"
 	"sort"
 	"strings"
+
+	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/internal/levenshtein"
 )
 
 const (
@@ -150,7 +152,7 @@ func suggestionScore(query, candidate string) int {
 	queryCompact := strings.ReplaceAll(query, " ", "")
 	candidateCompact := strings.ReplaceAll(normCandidate, " ", "")
 
-	dist := levenshteinDistance(queryCompact, candidateCompact)
+	dist := levenshtein.Distance(queryCompact, candidateCompact)
 	maxLen := max(len(queryCompact), len(candidateCompact))
 
 	// Normalize distance: 0.0 = identical, 1.0 = completely different
@@ -162,49 +164,4 @@ func suggestionScore(query, candidate string) int {
 	}
 
 	return dist + 3
-}
-
-func levenshteinDistance(a, b string) int {
-	if a == b {
-		return 0
-	}
-	if len(a) == 0 {
-		return len(b)
-	}
-	if len(b) == 0 {
-		return len(a)
-	}
-
-	prev := make([]int, len(b)+1)
-	curr := make([]int, len(b)+1)
-	for j := 0; j <= len(b); j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= len(a); i++ {
-		curr[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 0
-			if a[i-1] != b[j-1] {
-				cost = 1
-			}
-			insertion := curr[j-1] + 1
-			deletion := prev[j] + 1
-			substitution := prev[j-1] + cost
-			curr[j] = minInt(insertion, deletion, substitution)
-		}
-		prev, curr = curr, prev
-	}
-
-	return prev[len(b)]
-}
-
-func minInt(a, b, c int) int {
-	if a <= b && a <= c {
-		return a
-	}
-	if b <= c {
-		return b
-	}
-	return c
 }

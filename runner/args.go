@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/internal/levenshtein"
 )
 
 const defaultMaxArrayElements = 5
@@ -14,7 +15,7 @@ func suggestSimilarFlag(unknown string, flagToArgDef map[string]*config.Arg) str
 	best := ""
 	bestScore := 9999
 	for flag := range flagToArgDef {
-		dist := levenshteinDistance(unknown, flag)
+		dist := levenshtein.Distance(unknown, flag)
 		if dist < bestScore {
 			bestScore = dist
 			best = flag
@@ -29,51 +30,6 @@ func suggestSimilarFlag(unknown string, flagToArgDef map[string]*config.Arg) str
 		return best
 	}
 	return ""
-}
-
-func levenshteinDistance(a, b string) int {
-	if a == b {
-		return 0
-	}
-	if len(a) == 0 {
-		return len(b)
-	}
-	if len(b) == 0 {
-		return len(a)
-	}
-
-	prev := make([]int, len(b)+1)
-	curr := make([]int, len(b)+1)
-	for j := 0; j <= len(b); j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= len(a); i++ {
-		curr[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 0
-			if a[i-1] != b[j-1] {
-				cost = 1
-			}
-			insertion := curr[j-1] + 1
-			deletion := prev[j] + 1
-			substitution := prev[j-1] + cost
-			curr[j] = min(insertion, deletion, substitution)
-		}
-		prev, curr = curr, prev
-	}
-
-	return prev[len(b)]
-}
-
-func min(a, b, c int) int {
-	if a <= b && a <= c {
-		return a
-	}
-	if b <= c {
-		return b
-	}
-	return c
 }
 
 func validBooleanValues() string {

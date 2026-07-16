@@ -23,6 +23,9 @@ func loadEnvironmentFile(basePath, path, format, prefix string) ([]Var, error) {
 				Value: value,
 			})
 		}
+		if err := validateImportedVars(vars, path); err != nil {
+			return nil, err
+		}
 		return vars, nil
 	}
 
@@ -74,7 +77,21 @@ func loadEnvironmentFile(basePath, path, format, prefix string) ([]Var, error) {
 		return nil, fmt.Errorf("failed to read env file: %w", err)
 	}
 
+	if err := validateImportedVars(vars, path); err != nil {
+		return nil, err
+	}
+
 	return vars, nil
+}
+
+// validateImportedVars rejects reserved system variable names loaded from files.
+func validateImportedVars(vars []Var, path string) error {
+	for _, v := range vars {
+		if reservedSystemVars[v.Name] {
+			return fmt.Errorf("env/yaml import %q: variable name %q is reserved for system use and cannot be overridden", path, v.Name)
+		}
+	}
+	return nil
 }
 
 // ExpandVarsFromFile expands variables that reference env files

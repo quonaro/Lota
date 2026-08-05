@@ -51,12 +51,32 @@ commit_and_push() {
   echo "${pkgname} AUR updated to version ${PKGVER}"
 }
 
+git_clone_retry() {
+  local url="$1"
+  local dir="$2"
+  local max_retries="${GIT_CLONE_RETRIES:-5}"
+  local delay="${GIT_CLONE_DELAY:-30}"
+  local i
+
+  for i in $(seq 1 "${max_retries}"); do
+    if git clone "${url}" "${dir}" 2>&1; then
+      return 0
+    fi
+    if [ "${i}" -eq "${max_retries}" ]; then
+      echo "ERROR: git clone failed after ${max_retries} attempts: ${url}" >&2
+      return 1
+    fi
+    echo "git clone attempt ${i}/${max_retries} failed, retrying in ${delay}s..." >&2
+    sleep "${delay}"
+  done
+}
+
 update_lota_aur() {
   local AUR_DIR="${AUR_DIR:-${ROOT_DIR}/../lota-aur}"
   local AUR_REPO_URL="${AUR_REPO_URL:-ssh://aur@aur.archlinux.org/lota.git}"
 
   if [ ! -d "${AUR_DIR}/.git" ]; then
-    git clone "${AUR_REPO_URL}" "${AUR_DIR}"
+    git_clone_retry "${AUR_REPO_URL}" "${AUR_DIR}"
   fi
 
   cd "${AUR_DIR}"
@@ -73,7 +93,7 @@ update_lota_bin() {
   local AUR_BIN_REPO_URL="${AUR_BIN_REPO_URL:-ssh://aur@aur.archlinux.org/lota-bin.git}"
 
   if [ ! -d "${AUR_BIN_DIR}/.git" ]; then
-    git clone "${AUR_BIN_REPO_URL}" "${AUR_BIN_DIR}"
+    git_clone_retry "${AUR_BIN_REPO_URL}" "${AUR_BIN_DIR}"
   fi
 
   cd "${AUR_BIN_DIR}"

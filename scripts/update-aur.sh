@@ -54,8 +54,8 @@ commit_and_push() {
 git_clone_retry() {
   local url="$1"
   local dir="$2"
-  local max_retries="${GIT_CLONE_RETRIES:-5}"
-  local delay="${GIT_CLONE_DELAY:-30}"
+  local max_retries="${GIT_CLONE_RETRIES:-10}"
+  local delay="${GIT_CLONE_DELAY:-60}"
   local i
 
   for i in $(seq 1 "${max_retries}"); do

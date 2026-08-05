@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+    - 'v*'
 
 permissions:
   contents: write
@@ -12,34 +12,34 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: 'go.mod'
+        cache: true
 
-      - name: Build binaries
-        env:
-          VERSION: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
-        run: |
-          chmod +x ./scripts/build.sh
-          ./scripts/build.sh
+    - name: Build binaries
+      env:
+        VERSION: ${{ github.ref_name }}
+        COMMIT: ${{ github.sha }}
+      run: |
+        chmod +x ./scripts/build.sh
+        ./scripts/build.sh
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: dist/*
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release
+      uses: softprops/action-gh-release@v3
+      with:
+        files: dist/*
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   aur_sync:
     needs: release
@@ -47,30 +47,40 @@ jobs:
     container:
       image: archlinux:latest
     steps:
-      - name: Install dependencies
-        run: pacman -Syu --noconfirm git openssh base-devel curl
+    - name: Install dependencies
+      run: pacman -Syu --noconfirm git openssh base-devel curl
 
-      - uses: actions/checkout@v6
+    - uses: actions/checkout@v6
 
-      - name: Setup AUR SSH key
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
-            echo "AUR_SSH_PRIVATE_KEY is missing!" && exit 1
-          fi
-          mkdir -p /root/.ssh
-          chmod 700 /root/.ssh
-          echo "${AUR_SSH_PRIVATE_KEY}" > /root/.ssh/id_ed25519
-          chmod 600 /root/.ssh/id_ed25519
-          ssh-keyscan -t rsa,ecdsa,ed25519 aur.archlinux.org >> /root/.ssh/known_hosts 2>&1
-          chmod 644 /root/.ssh/known_hosts
-          printf 'Host aur.archlinux.org\n  IdentityFile /root/.ssh/id_ed25519\n  StrictHostKeyChecking accept-new\n' > /root/.ssh/config
-          chmod 600 /root/.ssh/config
+    - name: Setup AUR SSH key
+      env:
+        AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+      run: |
+        if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
+          echo "AUR_SSH_PRIVATE_KEY is missing!" && exit 1
+        fi
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+        echo "${AUR_SSH_PRIVATE_KEY}" > /root/.ssh/id_ed25519
+        chmod 600 /root/.ssh/id_ed25519
+        ssh-keyscan -t rsa,ecdsa,ed25519 aur.archlinux.org >> /root/.ssh/known_hosts 2>&1
+        chmod 644 /root/.ssh/known_hosts
+        printf 'Host aur.archlinux.org\n  IdentityFile /root/.ssh/id_ed25519\n  StrictHostKeyChecking accept-new\n' > /root/.ssh/config
+        chmod 600 /root/.ssh/config
 
-      - name: Update AUR
-        env:
-          VERSION: ${{ github.ref_name }}
-        run: |
-          chmod +x ./scripts/update-aur.sh
-          ./scripts/update-aur.sh "${VERSION}"
+    - name: Update AUR
+      id: aur_update
+      env:
+        VERSION: ${{ github.ref_name }}
+      run: |
+        chmod +x ./scripts/update-aur.sh
+        ./scripts/update-aur.sh "${VERSION}"
+
+    - name: Retry AUR update on failure
+      if: failure() && steps.aur_update.outcome == 'failure'
+      env:
+        VERSION: ${{ github.ref_name }}
+      run: |
+        echo "First attempt failed, waiting 5 minutes before retry..."
+        sleep 300
+        ./scripts/update-aur.sh "${VERSION}"

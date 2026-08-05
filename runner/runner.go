@@ -310,55 +310,18 @@ func executeShell(ctx context.Context, script string, env []string, shell string
 	defer closeLogFiles(logFiles)
 
 	// If stdin is a terminal, use direct I/O for interactive commands (sudo, etc.)
-	// Write script to temp file and execute directly to preserve interactive input
+	// shell -c reads the script from the argument, leaving stdin free for interactive input.
+	// SysProcAttr is cleared so the child shares the parent's process group, which is
+	// required for terminal control (e.g. sudo password prompts).
 	if IsTerminal(stdin) {
-		tmpFile, err := os.CreateTemp("", "lota-script-*.sh")
-		if err != nil {
-			return fmt.Errorf("create temp script file: %w", err)
-		}
-		tmpPath := tmpFile.Name()
-		// Extract shell name for shebang (e.g., "bash" from "bash -c")
-		shellName := strings.Fields(shell)[0]
-		// Find the actual path to the shell
-		shellPath, err := exec.LookPath(shellName)
-		if err != nil {
-			_ = tmpFile.Close()
-			_ = os.Remove(tmpPath)
-			return fmt.Errorf("find shell %s: %w", shellName, err)
-		}
-		if _, err := tmpFile.WriteString("#!" + shellPath + "\n" + script); err != nil {
-			_ = tmpFile.Close()
-			_ = os.Remove(tmpPath)
-			return fmt.Errorf("write temp script file: %w", err)
-		}
-		if err := tmpFile.Close(); err != nil {
-			_ = os.Remove(tmpPath)
-			return fmt.Errorf("close temp script file: %w", err)
-		}
-
-		// Make executable
-		if err := os.Chmod(tmpPath, 0755); err != nil {
-			_ = os.Remove(tmpPath)
-			return fmt.Errorf("chmod temp script file: %w", err)
-		}
-
-		cmd := exec.Command(tmpPath)
-		cmd.Env = append(os.Environ(), env...)
-		cmd.Dir = resolveDir(baseDir, workingDir, dir)
-		cmd.Stdin = stdin
 		cmd.Stdout = stdout
 		cmd.Stderr = stderr
 		cmd.SysProcAttr = nil
 
 		if err = cmd.Start(); err != nil {
-			_ = os.Remove(tmpPath)
 			return fmt.Errorf("start command: %w", err)
 		}
-		if err = gracefulWait(cmd, ctx, shutdownOnce, stderr); err != nil {
-			_ = os.Remove(tmpPath)
-			return err
-		}
-		_ = os.Remove(tmpPath)
+		err = gracefulWait(cmd, ctx, shutdownOnce, stderr)
 	} else {
 		needsPTY := len(stdoutWriters) != 1 || stdoutWriters[0] != os.Stdout ||
 			len(stderrWriters) != 1 || stderrWriters[0] != os.Stderr

@@ -491,6 +491,8 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			c.Desc = valueNode.Value
 		case "dir":
 			c.Dir = valueNode.Value
+		case "shell":
+			c.Shell = valueNode.Value
 		case "color":
 			c.Color = valueNode.Value
 			if !isValidColor(c.Color) {

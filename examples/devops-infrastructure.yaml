@@ -4,8 +4,8 @@
 shell: bash
 
 vars:
-  - DOCKER_COMPOSE=docker-compose
-  - KUBECTL=kubectl
+- DOCKER_COMPOSE=docker-compose
+- KUBECTL=kubectl
 
 infra:
   desc: Infrastructure management
@@ -20,8 +20,8 @@ infra:
     logs:
       desc: View logs
       args:
-        - service:str
-        - ...tail
+      - service:str
+      - ...tail
       script: $DOCKER_COMPOSE logs -f "$service" "$tail"
   k8s:
     desc: Kubernetes operations
@@ -30,18 +30,18 @@ infra:
       create:
         desc: Create namespace
         args:
-          - name:str
+        - name:str
         script: $KUBECTL create namespace "$name"
       delete:
         desc: Delete namespace
         args:
-          - name:str
+        - name:str
         script: $KUBECTL delete namespace "$name"
     deploy:
       desc: Deploy application
       args:
-        - env|e:str=dev
-        - dry|d:bool
+      - env|e:str=dev
+      - dry|d:bool=false
       script: |
         if [ "$dry" = "true" ]; then
           $KUBECTL apply --dry-run=client -f "k8s/$env/"

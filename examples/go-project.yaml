@@ -4,18 +4,18 @@
 shell: bash
 
 vars:
-  - GOOS=linux
-  - GOARCH=amd64
-  - BINARY_NAME=app
+- GOOS=linux
+- GOARCH=amd64
+- BINARY_NAME=app
 
 args:
-  - target|t:str=linux/amd64
+- target|t:str=linux/amd64
 
 build:
   desc: Build the application
   args:
-    - output|o:str=./bin
-    - race|r:bool
+  - output|o:str=./bin
+  - race|r:bool=false
   script: |
     if [ "$race" = "true" ]; then
       go build -race -o "$output/$BINARY_NAME" .
@@ -26,8 +26,8 @@ build:
 test:
   desc: Run tests
   args:
-    - verbose|v:bool
-    - cover|c:bool
+  - verbose|v:bool=false
+  - cover|c:bool=false
   script: |
     FLAGS=""
     if [ "$verbose" = "true" ]; then

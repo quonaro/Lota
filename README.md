@@ -11,7 +11,7 @@ A configurable task runner for rapid development. Define commands in a YAML file
 - 👁️ **Dry-run mode** — Run with `--dry-run` to print the exact scripts and resolved environment without executing them.
 - 🛡️ **Graceful shutdown** — `SIGINT`/`SIGTERM` are propagated to child processes with a graceful period before forced termination.
 - 📄 **Env file imports** — Load variables from `.env` files via `import:env .env` inside `vars`.
-- 📊 **YAML config imports** — Import nested YAML files as variables with `import:yaml <file>[@section] [prefix]` and access flattened keys like `${app.database.host}`.
+- 📊 **YAML config imports** — Import nested YAML files as variables with `import:yaml <file>[@section] [prefix]` and access flattened keys like `$app.database.host`.
 - 📂 **Nested groups** — Organize commands in hierarchical groups (`lota infra docker up`) with arbitrary nesting depth.
 - 📁 **Working directory** — Set `dir` per group or command. Relative paths resolve against the config file; use `$CWD` to run from the current directory.
 - 📝 **Tee logging** — Mirror command output to log files while still printing to the terminal. Logs are inherited down the group tree and can be made `independent`.
@@ -22,6 +22,10 @@ A configurable task runner for rapid development. Define commands in a YAML file
 - 🧩 **Execution hooks** — Build pipelines with `before`, `script`, `after`, `fallback` and `finally` stages.
 - 🧱 **Native commands** — Embed Lota as a Go library and register Go functions as handlers for `native: true` commands.
 - 🎯 **Shell completion** — Built-in completion for bash, zsh and fish.
+- 💡 **Smart suggestions** — Typo a command name? Lota suggests the closest match using Levenshtein distance ("Did you mean: ...?").
+- 📥 **Config imports** — Merge other Lota config files or remote URLs with optional namespacing via `imports`.
+- 🖥️ **PTY support** — Pseudo-terminal allocation preserves ANSI colors when tee-logging to files.
+- 👻 **Hidden commands** — Set `show: false` to keep commands executable but out of help output.
 
 ## 📦 Installation
 
@@ -56,8 +60,12 @@ cd lota && go build -o lota . && sudo mv lota /usr/local/bin/
 
 ## 📚 Documentation
 
-- **[Embedding Guide](docs/EMBEDDING.md)** - How to embed Lota in your Go application
-- **[Examples](examples/)** - Complete configuration examples for various use cases
+- **[Configuration Reference](docs/CONFIGURATION.md)** — Complete reference for every YAML field
+- **[CLI Usage](docs/CLI.md)** — All CLI flags, config resolution, completion, exit codes
+- **[Arguments, Variables & Interpolation](docs/ARGUMENTS_VARS.md)** — Deep dive into args, vars, and `$name` interpolation
+- **[Execution, Architecture & Examples](docs/EXECUTION.md)** — Hooks, dependencies, PTY, architecture, example walkthroughs
+- **[Embedding Guide](docs/EMBEDDING.md)** — How to embed Lota in your Go application
+- **[Examples](examples/)** — Complete configuration examples for various use cases
 
 ## 🚀 Quick Start
 
@@ -206,9 +214,10 @@ shell: bash # Optional: default shell (auto-detected if omitted)
 vars: # global environment variables
   - KEY=value
   - import:env .env # Import from .env file
+  - import:yaml config.yaml # Import from YAML file
 
 args: # global argument definitions
-  - name:type=default
+  - name|short:type=default
 
 imports: # optional: import other config files / URLs
   - url: extra.yaml
@@ -218,22 +227,50 @@ group-name: # command group
   desc: ...
   color: cyan # Optional: highlight group name in help
   inherit_color: true # Optional: inherit color from parent group
+  show: false # Optional: hide from help output
   shell: sh # Optional: override shell for this group
+  dir: ./subdir # Optional: working directory for this group
   vars: # group-level variables
     - KEY=value
   args: # group-level arguments
-    - name:type=default
+    - name|short:type=default
   log: # Optional: group-level tee logging
     path: group.log
-  command-name:
+  nested-group: # nested group
     desc: ...
-    color: green # Optional: highlight command name in help
-    script: ...
+    command-name: # command inside group
+      desc: ...
+      color: green # Optional: highlight command name in help
+      inherit_color: true # Optional: inherit color from parent group
+      show: false # Optional: hide from help output
+      shell: sh # Optional: override shell for this command
+      dir: ./src # Optional: working directory for this command
+      vars: # command-level variables
+        - KEY=value
+      args: # command-level arguments
+        - name|short:type=default
+      before: ... # Optional: pre-execution hook
+      script: ... # Main script
+      after: ... # Optional: post-success hook
+      fallback: ... # Optional: error recovery hook
+      finally: ... # Optional: always-runs cleanup hook
+      depends: # Optional: commands to run before this one
+        - other-command
+      parallel: true # Optional: run dependencies in parallel (default: true)
+      native: true # Optional: mark as native Go command (embedded mode only)
+      log: # Optional: command-level tee logging
+        path: cmd.log
+        truncate: true
+        independent: true
 
 command-name: # top-level command
   desc: ...
   color: red # Optional: highlight command name in help
   script: ...
+  before: ... # Optional: pre-execution hook
+  after: ... # Optional: post-success hook
+  fallback: ... # Optional: error recovery hook
+  finally: ... # Optional: always-runs cleanup hook
   log: # Optional: command-level tee logging
     path: cmd.log
 ```
@@ -241,6 +278,12 @@ command-name: # top-level command
 ### 🔑 Variables (`vars`)
 
 Variables are exported as environment variables into scripts. Both `vars` and `args` share a unified environment pool — CLI args override vars on name collision. They support three scopes with priority: **app < group < command**.
+
+**Reserved system variables** cannot be overridden in `vars`:
+
+`PATH`, `HOME`, `USER`, `SHELL`, `LANG`, `LC_ALL`, `TERM`, `PWD`, `OLDPWD`, `HOSTNAME`, `LOGNAME`, `MAIL`, `TMPDIR`, `DISPLAY`, `XAUTHORITY`, `EDITOR`, `VISUAL`, `PAGER`
+
+**Special variables:** `$CWD` is reserved for working directory resolution (see [Working Directory](#-working-directory-dir)).
 
 ```yaml
 vars:
@@ -311,7 +354,7 @@ vars:
   app.database.port: "5432"
 ```
 
-Access in scripts: `${app.app_name}`, `${app.database.host}`
+Access in scripts: `$app.app_name`, `$app.database.host`
 
 ### 🎯 Arguments (`args`)
 
@@ -319,12 +362,15 @@ Arguments are passed from the CLI and exported as environment variables, accessi
 
 **Format:** `name|short:type=default`
 
-| Part       | Description              | Example                         |
-| ---------- | ------------------------ | ------------------------------- |
-| `name`     | Long name                | `output`                        |
-| `\|short`  | Short alias (optional)   | `\|o`                           |
-| `:type`    | Type (optional)          | `:str`, `:int`, `:bool`, `:arr` |
-| `=default` | Default value (optional) | `=./bin`                        |
+| Part       | Description                  | Example                         |
+| ---------- | ---------------------------- | ------------------------------- |
+| `name`     | Long name                    | `output`                        |
+| `\|short`  | Short alias (optional)       | `\|o`                           |
+| `:type`    | Type (optional)              | `:str`, `:int`, `:bool`, `:arr` |
+| `:type?`   | Optional marker (no default) | `:str?` — arg not required      |
+| `=default` | Default value (optional)     | `=./bin`                        |
+
+> A default value (`=default`) automatically makes an argument optional. The `?` marker is useful when you want an argument to be optional **without** a default value (it will be empty string if not provided).
 
 #### 📝 Argument Types
 
@@ -391,6 +437,24 @@ lota cmd --!verbose         # verbose=false
 lota cmd --verbose=false    # verbose=false
 ```
 
+#### Flag Syntax
+
+Flags can be passed in several forms:
+
+```bash
+lota cmd --output ./dist     # space-separated
+lota cmd --output=./dist     # equals-separated
+lota cmd -o ./dist           # short flag
+lota cmd -o=./dist           # short flag, equals-separated
+```
+
+Use `--` to signal end of flags — everything after is treated as positional arguments:
+
+```bash
+lota cmd -- --flag-like-value
+# '--flag-like-value' is passed as a positional arg, not parsed as a flag
+```
+
 #### Argument Scopes
 
 Like vars, args can be defined at app, group, or command level and are merged with the same priority (command wins):
@@ -408,7 +472,34 @@ deploy:
 
 > **Deprecation:** Using `{{name}}` for variable and argument interpolation is deprecated. Use `$name` instead. `{{name}}` will be removed in a future version.
 
-> **Reserved Variables:** System environment variable names (PATH, HOME, USER, SHELL, etc.) are reserved and cannot be overridden in `vars`.
+### 📥 Config Imports (`imports`)
+
+Import other Lota configuration files and merge them into the current config. Supports local files and remote URLs.
+
+```yaml
+imports:
+  - url: ./extra.yaml # local file (relative to lota.yml)
+  - url: https://example.com/shared.yaml # remote URL
+    namespace: shared # wrap imported commands/groups under 'shared'
+```
+
+| Field       | Type   | Description                                                                                 |
+| ----------- | ------ | ------------------------------------------------------------------------------------------- |
+| `url`       | string | Path to local file or HTTP/HTTPS URL                                                        |
+| `namespace` | string | Optional. Wraps all imported commands and groups under a new top-level group with this name |
+
+**Merge rules:**
+
+- **Without namespace:** Imported commands and groups merge directly into the root. Local definitions override imported ones with the same name.
+- **With namespace:** Imported commands and groups are wrapped under a new top-level group named after the namespace.
+- **Variables:** Always merged into root (no namespace wrapping). Local vars override imported vars.
+- **Nested imports:** Imported configs cannot have their own `imports` field (silently ignored).
+
+**URL fetching:**
+
+- Configs are downloaded with a 100MB size limit
+- Cached at `/tmp/lota_cache/<sha256>.yml` for subsequent runs
+- TLS verification is skipped (use with trusted sources only)
 
 ### 🐚 Shell Configuration
 
@@ -693,6 +784,51 @@ dev:
 
 Color resolution priority: **direct `color` > inherited `color` > default**. `inherit_color: true` walks up the group chain and uses the first non-empty color found. Hex colors work in true-color capable terminals.
 
+### 👻 Hiding Commands (`show`)
+
+Set `show: false` to hide a command or group from the help output. Hidden commands remain executable but don't appear in `lota --help` or group listings:
+
+```yaml
+dev:
+  desc: Development commands
+  run:
+    desc: Run dev server
+    script: air
+  internal-task:
+    show: false
+    script: ./scripts/internal.sh
+```
+
+```bash
+lota dev run            # visible in help
+lota dev internal-task  # hidden from help, but still works
+```
+
+### 🧱 Native Commands (`native`)
+
+Commands marked with `native: true` are executed as Go functions instead of shell scripts. This is only available when embedding Lota as a Go library — the CLI has no native handlers registered.
+
+```yaml
+server:
+  desc: Start HTTP server
+  native: true
+  args:
+    - port:int=8080
+    - host:str=0.0.0.0
+
+admin:
+  desc: Admin utilities
+  users:
+    reset-password:
+      desc: Reset user password
+      native: true
+      args:
+        - username:str
+        - password:str
+```
+
+See the [Embedding Guide](docs/EMBEDDING.md) for how to register native handlers in Go.
+
 ## 🚩 Global Flags
 
 | Flag                                   | Description                                          |
@@ -703,7 +839,7 @@ Color resolution priority: **direct `color` > inherited `color` > default**. `in
 | `-v`, `--verbose`                      | Enable verbose output                                |
 | `--dry-run`                            | Show commands without executing                      |
 | `--init`                               | Create a template lota.yml                           |
-| `--config`                             | Specify config file or directory                     |
+| `--config`                             | Specify config file, directory, or URL               |
 | `-g`                                   | Use system-wide config (`/etc/lota.yml`)             |
 | `-u`                                   | Use user config (`~/.local/share/lota.yml`)          |
 | `--timeout <duration>`                 | Set a command timeout (e.g. `30s`, `5m`)             |
@@ -761,7 +897,9 @@ unset COMP_LINE COMP_POINT
 
 Then regenerate and reinstall the completion script for your shell.
 
-## 🔍 Upward Config Search
+## 🔍 Config Resolution
+
+### Upward Config Search
 
 If `lota.yml` is not found in the current directory, Lota searches upward through parent directories until it finds one or reaches the git root (`.git` directory) or the filesystem root (`/`).
 
@@ -772,11 +910,53 @@ cd backend/src
 lota build    # finds lota.yml in project root
 ```
 
+### Config from URL
+
+Load configuration directly from a remote URL:
+
+```bash
+lota --config https://example.com/lota.yml build
+```
+
+Remote configs are cached at `/tmp/lota_cache/<sha256>.yml` for subsequent runs.
+
+### Config from Directory
+
+Point `--config` at a directory and Lota will search for `lota.yml` or `lota.yaml` inside it:
+
+```bash
+lota --config ./my-project build
+```
+
+### System-wide and User Configs
+
+Use `-g` for a system-wide config at `/etc/lota.yml`, or `-u` for a user-level config at `~/.local/share/lota.yml`:
+
+```bash
+lota -g build    # use /etc/lota.yml
+lota -u build    # use ~/.local/share/lota.yml
+```
+
+### Command Help
+
 Pass `--help` after a command to see its arguments:
 
 ```bash
 lota dev run --help
 ```
+
+### Smart Suggestions
+
+When a command is not found, Lota suggests the closest matches using Levenshtein distance:
+
+```bash
+$ lota biuld
+command not found: biuld
+Did you mean:
+  - build
+```
+
+Suggestions are also provided for unknown YAML fields and unknown flags during command execution.
 
 ## 👁️ Dry Run Mode
 
@@ -786,7 +966,15 @@ Preview what would be executed without actually running it:
 lota build --dry-run
 ```
 
-## 👨‍💻 Development
+Dry run prints the resolved scripts with all variables and arguments interpolated, and shows the environment that would be set — without executing anything.
+
+## �️ Terminal & PTY
+
+On Unix systems, Lota allocates a pseudo-terminal (PTY) for command execution when output needs to be tee'd to log files. This preserves ANSI colors from child processes that check `isatty`. If PTY allocation fails, Lota falls back to normal pipes.
+
+`SIGINT`/`SIGTERM` are propagated to child processes. Lota sends `SIGTERM` first, waits a grace period, then sends `SIGKILL` if the process hasn't exited. The `^C` echo on the terminal is disabled during execution for cleaner output.
+
+## ��‍💻 Development
 
 ### Prerequisites
 
@@ -856,18 +1044,50 @@ gofmt -w -s .
 
 Lota follows a strict layered architecture:
 
-- **config/** - YAML parsing and configuration models
-- **runner/** - Command execution, argument parsing, interpolation
-- **engine/** - High-level orchestration used by the CLI and embedded Go API
-- **cli/** - CLI orchestration (binds config and engine; does not import runner directly)
-- **shared/** - Constants and shared utilities
+```
+┌─────────────────────────────────────────────────┐
+│                   main.go                        │
+│  (signal handling, terminal setup, exit codes)   │
+└────────────────────┬────────────────────────────┘
+                     │
+              ┌──────▼──────┐
+              │    cli/      │
+              │  (orchestrator)│
+              └──┬───────┬───┘
+                 │       │
+          ┌──────▼──┐ ┌──▼──────┐
+          │ config/  │ │ engine/  │
+          │ (parse)  │ │ (orchestrate)│
+          └─────────┘ └──┬──────┘
+                        │
+                   ┌────▼────┐
+                   │ runner/  │
+                   │ (execute)│
+                   └──────────┘
+```
+
+- **config/** — YAML parsing, configuration models, imports, env file loading, URL fetching, validation
+- **runner/** — Command execution, argument parsing, variable interpolation, shell resolution, PTY allocation, tee logging
+- **engine/** — High-level orchestration: dependency resolution, parallel execution, native commands, help generation, shell completion
+- **cli/** — CLI orchestration: flag parsing, config loading, command lookup, output formatting, suggestions
+- **shared/** — Constants (app name, config file names, version info)
+- **logger/** — Debug logging with verbose mode support
+- **internal/** — Internal utilities (Levenshtein distance for suggestions, terminal helpers)
+
+**Layering rules:**
+
+- `runner` must not import `cli`
+- `config` must not import `runner`
+- `cli` is the top-level orchestrator that binds `config` and `engine`
+- `engine` bridges `config` and `runner`
 
 Key design principles:
 
-- Stateless - no global variables
-- Context-aware execution with graceful shutdown
-- Pure functions for interpolation and parsing (testable)
-- Clean error handling with wrapped errors
+- Stateless — no global variables; state (verbose, dry-run) passed through context or arguments
+- Context-aware execution with graceful shutdown via `exec.CommandContext`
+- Pure functions for interpolation and parsing (testable without file I/O)
+- Clean error handling with wrapped errors (`fmt.Errorf("context: %w", err)`)
+- Cyclic dependency detection for both variable interpolation (max depth 10) and command dependencies
 
 ## 📜 License
 

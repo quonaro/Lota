@@ -1007,6 +1007,34 @@ deploy:
 	}
 }
 
+func TestParseConfig_CommandShell(t *testing.T) {
+	yamlContent := `
+migrate:
+  desc: Run migrations
+  script: echo migrate
+  shell: bash
+`
+	tmpFile := filepath.Join(t.TempDir(), "lota.yml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	cfg, err := ParseConfig(tmpFile)
+	if err != nil {
+		t.Fatalf("ParseConfig() error: %v", err)
+	}
+	if len(cfg.Commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(cfg.Commands))
+	}
+	cmd := cfg.Commands[0]
+	if cmd.Name != "migrate" {
+		t.Errorf("expected command name 'migrate', got %q", cmd.Name)
+	}
+	if cmd.Shell != "bash" {
+		t.Errorf("expected shell 'bash', got %q", cmd.Shell)
+	}
+}
+
 func TestParseConfig_NativeInGroupWithoutScript(t *testing.T) {
 	yamlContent := `
 admin:

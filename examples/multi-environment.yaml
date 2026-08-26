@@ -4,12 +4,12 @@
 shell: bash
 
 vars:
-  - import:env .env.local
-  - import:env .env.shared
-  - import:yaml config/secrets.yaml@public app # Import public config section
+- import:env .env.local
+- import:env .env.shared
+- import:yaml config/secrets.yaml@public app # Import public config section
 
 args:
-  - environment|env:str=dev
+- environment|env:str=dev
 
 db:
   desc: Database operations
@@ -38,7 +38,7 @@ deploy:
   production:
     desc: Deploy to production
     args:
-      - confirm|c:bool
+    - confirm|c:bool=false
     script: |
       if [ "$confirm" != "true" ]; then
         echo "Use --confirm to deploy to production"

@@ -11,11 +11,9 @@ vars:
 admin:
   desc: Administrative utilities
   color: cyan
-  inherit_color: true
 
   vars:
   - "ADMIN_LOG_LEVEL=info"
-
   # Sub-groups
   users:
     desc: User management
@@ -57,14 +55,12 @@ deploy:
 lint:
   desc: Run all linters
   color: magenta
-  parallel: true
   script: |
     echo "Linting..."
 
 test:
   desc: Run tests
   color: blue
-  parallel: true
   script: |
     echo "Running tests..."
 

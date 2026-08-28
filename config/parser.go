@@ -97,6 +97,20 @@ func hasField(node *yaml.Node, field string) bool {
 var groupFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "shell", "log"}
 var commandFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log", "native"}
 
+func isCommandOnlyField(field string) bool {
+	for _, f := range commandFields {
+		if f == field {
+			for _, g := range groupFields {
+				if g == field {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
 func suggestField(unknown string, valid []string) string {
 	best := ""
 	bestScore := 9999
@@ -456,6 +470,9 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 					return err
 				}
 				continue
+			}
+			if isCommandOnlyField(key) {
+				return fmt.Errorf("field %q is not supported in groups, only in commands (group %q at line %d)", key, g.Name, node.Content[i].Line)
 			}
 			if valueNode.Kind != yaml.MappingNode {
 				suggestion := suggestField(key, groupFields)

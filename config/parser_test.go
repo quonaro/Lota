@@ -266,6 +266,7 @@ func TestParseConfig(t *testing.T) {
 		name        string
 		yamlContent string
 		wantErr     bool
+		errContain  string
 		check       func(*testing.T, *AppConfig)
 	}{
 		{
@@ -613,6 +614,18 @@ vars:
 			wantErr:     true,
 			check:       nil,
 		},
+		{
+			name: "command-only field depends in group",
+			yamlContent: `all:
+  desc: Serve both sites
+  depends:
+  - casegames
+  - mos-school
+`,
+			wantErr:    true,
+			errContain: `field "depends" is not supported in groups, only in commands`,
+			check:      nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -626,6 +639,9 @@ vars:
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if tt.errContain != "" && err != nil && !strings.Contains(err.Error(), tt.errContain) {
+				t.Errorf("ParseConfig() error = %q, want to contain %q", err.Error(), tt.errContain)
 			}
 
 			if tt.check != nil {

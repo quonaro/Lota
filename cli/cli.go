@@ -53,11 +53,6 @@ func Run(ctx context.Context) error {
 	}
 
 	if len(remainingArgs) == 0 {
-		// If -g or -u is used without a command, show help without loading config
-		if flags.GlobalConfig || flags.UserConfig {
-			printGlobalOptions()
-			return nil
-		}
 		PrintHelp(flags.Config)
 		return nil
 	}

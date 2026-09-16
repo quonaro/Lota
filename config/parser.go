@@ -344,18 +344,18 @@ func (g *Group) tryParseNestedCommandOrGroup(key string, valueNode *yaml.Node, l
 	}
 	if hasField(valueNode, "script") || hasField(valueNode, "native") {
 		var cmd Command
+		cmd.Name = key
 		if err := valueNode.Decode(&cmd); err != nil {
 			return false, fmt.Errorf("failed to parse command %q in group %q at line %d: %w", key, g.Name, line, err)
 		}
-		cmd.Name = key
 		g.Commands = append(g.Commands, cmd)
 		return true, nil
 	}
 	var sub Group
+	sub.Name = key
 	if err := valueNode.Decode(&sub); err != nil {
 		return false, fmt.Errorf("failed to parse nested group %q in group %q at line %d: %w", key, g.Name, line, err)
 	}
-	sub.Name = key
 	g.Groups = append(g.Groups, sub)
 	return true, nil
 }
@@ -432,7 +432,7 @@ func (g *Group) UnmarshalYAML(node *yaml.Node) error {
 				continue
 			}
 			if err := valueNode.Decode(&g.Vars); err != nil {
-				return fmt.Errorf("failed to parse vars in group %q at line %d: %w", g.Name, valueNode.Line, err)
+				return err
 			}
 		case "args":
 			if ok, err := g.tryParseNestedCommandOrGroup(key, valueNode, node.Content[i].Line); ok || err != nil {
@@ -529,7 +529,7 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			c.Show = &show
 		case "vars":
 			if err := valueNode.Decode(&c.Vars); err != nil {
-				return fmt.Errorf("failed to parse vars in command %q at line %d: %w", c.Name, valueNode.Line, err)
+				return err
 			}
 		case "args":
 			if err := valueNode.Decode(&c.RawArgs); err != nil {
@@ -716,7 +716,7 @@ func (v *Var) UnmarshalYAML(node *yaml.Node) error {
 
 	// Validate against reserved system variable names
 	if reservedSystemVars[v.Name] {
-		return fmt.Errorf("line %d: variable name %q is reserved for system use and cannot be overridden", node.Line, v.Name)
+		return fmt.Errorf("variable %q is a reserved system environment variable and cannot be overridden — use a different name", v.Name)
 	}
 
 	return nil

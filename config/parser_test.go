@@ -626,6 +626,18 @@ vars:
 			errContain: `field "depends" is not supported in groups, only in commands`,
 			check:      nil,
 		},
+		{
+			name: "reserved var PATH in nested command",
+			yamlContent: `dev:
+  cg:
+    vars:
+      - PATH=resources/cg
+    script: python3 serve.py
+`,
+			wantErr:    true,
+			errContain: `"PATH" is a reserved system environment variable`,
+			check:      nil,
+		},
 	}
 
 	for _, tt := range tests {

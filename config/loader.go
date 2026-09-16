@@ -38,6 +38,7 @@ func CurrentDir() (string, error) {
 func findConfigFile(dir string) (string, error) {
 	logger.Debugf("config: searching for config file starting from: %s", dir)
 	var checked []string
+	softStop := false
 	for {
 		// Try .yml first (backward compatibility)
 		ymlPath := filepath.Join(dir, shared.ConfigFileName)
@@ -57,15 +58,20 @@ func findConfigFile(dir string) (string, error) {
 
 		checked = append(checked, dir)
 
-		// Stop at git root
-		gitPath := filepath.Join(dir, ".git")
-		if _, err := os.Stat(gitPath); err == nil {
+		// Already checked one level above a git root — stop
+		if softStop {
 			break
 		}
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			break
+		}
+
+		// .git is a soft boundary: allow checking one level above the git root
+		gitPath := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitPath); err == nil {
+			softStop = true
 		}
 		dir = parent
 	}

@@ -16,7 +16,7 @@ A configurable task runner for rapid development. Define commands in a YAML file
 - 📁 **Working directory** — Set `dir` per group or command. Relative paths resolve against the config file; use `$CWD` to run from the current directory.
 - 📝 **Tee logging** — Mirror command output to log files while still printing to the terminal. Logs are inherited down the group tree and can be made `independent`.
 - 🔗 **Command dependencies** — Declare `depends` with full dot-paths. Independent dependencies run in parallel by default, shared ones run once, and circular dependencies are detected automatically.
-- 🔍 **Upward config search** — Run commands from any subdirectory: Lota walks up to the git root looking for `lota.yml`/`lota.yaml`.
+- 🔍 **Upward config search** — Run commands from any subdirectory: Lota walks up looking for `lota.yml`/`lota.yaml`. A `.git` directory is a soft boundary — Lota still checks one level above it, so a shared config works for nested repos.
 - 🎨 **Colored help** — Highlight group and command names with named ANSI colors or hex values (e.g. `#FF5733`).
 - ⏱️ **Command timeout** — Set a per-run timeout with `--timeout 5m`.
 - 🧩 **Execution hooks** — Build pipelines with `before`, `script`, `after`, `fallback` and `finally` stages.
@@ -901,7 +901,7 @@ Then regenerate and reinstall the completion script for your shell.
 
 ### Upward Config Search
 
-If `lota.yml` is not found in the current directory, Lota searches upward through parent directories until it finds one or reaches the git root (`.git` directory) or the filesystem root (`/`).
+If `lota.yml` is not found in the current directory, Lota searches upward through parent directories until it finds one or reaches the filesystem root (`/`). A `.git` directory is a soft boundary: when encountered, Lota still checks one level above the git root before stopping. This lets a shared `lota.yml` in a workspace folder serve nested repositories.
 
 This is critical for monorepos and nested projects where you might run commands from subdirectories:
 

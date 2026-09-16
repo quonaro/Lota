@@ -2,10 +2,11 @@ package config
 
 import (
 	"errors"
-	"github.com/quonaro/lota/shared"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/quonaro/lota/shared"
 )
 
 func TestGetConfig(t *testing.T) {
@@ -187,31 +188,43 @@ func TestFindConfigFile_UpwardSearch(t *testing.T) {
 	}
 }
 
-func TestFindConfigFile_StopsAtGitRoot(t *testing.T) {
-	root := t.TempDir()
-	subDir := filepath.Join(root, "sub")
+func TestFindConfigFile_SoftGitBoundary(t *testing.T) {
+	base := t.TempDir()
+	wsDir := filepath.Join(base, "ws")
+	repoDir := filepath.Join(wsDir, "repo")
+	subDir := filepath.Join(repoDir, "sub")
 	if err := os.MkdirAll(subDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-
-	// Create .git in root
-	gitDir := filepath.Join(root, ".git")
-	if err := os.MkdirAll(gitDir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create config ABOVE git root (should not be found)
-	parentDir := filepath.Dir(root)
-	parentConfig := filepath.Join(parentDir, shared.ConfigFileName)
-	if err := os.WriteFile(parentConfig, []byte("test"), 0644); err != nil {
+	// Config one level above the git root is found (soft boundary)
+	wsConfig := filepath.Join(wsDir, shared.ConfigFileName)
+	if err := os.WriteFile(wsConfig, []byte("test"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// Ensure cleanup of parent config
-	t.Cleanup(func() { _ = os.Remove(parentConfig) })
 
-	_, err := findConfigFile(subDir)
-	if err == nil {
-		t.Error("findConfigFile() should fail when config is above git root")
+	result, err := findConfigFile(subDir)
+	if err != nil {
+		t.Fatalf("findConfigFile() failed: %v", err)
+	}
+	if result != wsConfig {
+		t.Errorf("findConfigFile() = %v, want %v", result, wsConfig)
+	}
+
+	// Config two levels above the git root is not found
+	if err := os.Remove(wsConfig); err != nil {
+		t.Fatal(err)
+	}
+	baseConfig := filepath.Join(base, shared.ConfigFileName)
+	if err := os.WriteFile(baseConfig, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := findConfigFile(subDir); err == nil {
+		t.Error("findConfigFile() should fail when config is two levels above git root")
 	}
 }
 

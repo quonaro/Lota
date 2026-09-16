@@ -21,21 +21,21 @@ Complete reference for the Lota command-line interface.
 
 ## Global Flags
 
-| Flag                                   | Description                                          |
-| -------------------------------------- | ---------------------------------------------------- |
-| `-h`, `--help`                         | Show help                                            |
-| `-V`                                   | Show version only (machine-friendly)                 |
-| `--version`                            | Show version with ASCII banner                       |
-| `-v`, `--verbose`                      | Enable verbose (debug) output                        |
-| `--dry-run`                            | Show commands without executing                      |
+| Flag                                   | Description                                           |
+| -------------------------------------- | ----------------------------------------------------- |
+| `-h`, `--help`                         | Show help                                             |
+| `-V`                                   | Show version only (machine-friendly)                  |
+| `--version`                            | Show version with ASCII banner                        |
+| `-v`, `--verbose`                      | Enable verbose (debug) output                         |
+| `--dry-run`                            | Show commands without executing                       |
 | `--init`                               | Create a template `lota.yml` in the current directory |
-| `--config <path>`                      | Specify config file, directory, or URL               |
-| `-g`                                   | Use system-wide config (`/etc/lota.yml`)             |
-| `-u`                                   | Use user config (`~/.local/share/lota.yml`)          |
-| `--timeout <duration>`                 | Set a command timeout (e.g. `30s`, `5m`)             |
-| `--install-completion`                 | Install shell completion script (auto-detects shell) |
-| `--install-completion zsh\|bash\|fish` | Install completion for a specific shell              |
-| `--completion-script zsh\|bash\|fish`  | Print completion script to stdout                    |
+| `--config <path>`                      | Specify config file, directory, or URL                |
+| `-g`                                   | Use system-wide config (`/etc/lota.yml`)              |
+| `-u`                                   | Use user config (`~/.local/share/lota.yml`)           |
+| `--timeout <duration>`                 | Set a command timeout (e.g. `30s`, `5m`)              |
+| `--install-completion`                 | Install shell completion script (auto-detects shell)  |
+| `--install-completion zsh\|bash\|fish` | Install completion for a specific shell               |
+| `--completion-script zsh\|bash\|fish`  | Print completion script to stdout                     |
 
 ### Usage Examples
 
@@ -100,7 +100,7 @@ If no flag is provided, Lota searches for `lota.yml` or `lota.yaml`:
 
 1. In the current directory
 2. In each parent directory, walking upward
-3. Stops at the first match, or at the git root (`.git` directory), or at the filesystem root (`/`)
+3. Stops at the first match, or at the filesystem root (`/`). A `.git` directory is a soft boundary: Lota checks one level above the git root before stopping, so a shared `lota.yml` in a workspace folder can serve nested repositories
 
 This is critical for monorepos:
 
@@ -124,6 +124,7 @@ lota build --dry-run
 ```
 
 Dry run output includes:
+
 - The resolved scripts with all variables and arguments interpolated
 - The environment variables that would be set
 - The shell that would be used
@@ -173,11 +174,11 @@ lota --install-completion
 
 Lota detects your shell from `$SHELL` and writes the completion script to the standard location:
 
-| Shell | Install Path                                                           |
-| ----- | ---------------------------------------------------------------------- |
-| bash  | `~/.local/share/bash-completion/completions/lota`                      |
-| zsh   | `~/.config/zsh/completions/_lota`                                      |
-| fish  | `~/.config/fish/completions/lota.fish`                                 |
+| Shell | Install Path                                      |
+| ----- | ------------------------------------------------- |
+| bash  | `~/.local/share/bash-completion/completions/lota` |
+| zsh   | `~/.config/zsh/completions/_lota`                 |
+| fish  | `~/.config/fish/completions/lota.fish`            |
 
 For zsh, Lota also updates `~/.zshrc` to add the completion directory to `fpath` (before `compinit` if found). After installation, reload your shell: `exec zsh`.
 
@@ -270,6 +271,7 @@ Did you mean:
 ```
 
 Suggestions are also provided for:
+
 - **Unknown YAML fields** — "Did you mean: `script`?" when you typo a field name
 - **Unknown flags** — "Did you mean: `--verbose`?" when you pass an unrecognized flag
 
@@ -331,12 +333,12 @@ lota cmd --verbose=false  # verbose=false
 
 ## Exit Codes
 
-| Code | Meaning                                              |
-| ---- | ---------------------------------------------------- |
-| `0`  | Success                                              |
-| `1`  | Command execution failed (non-zero exit from script) |
-| `2`  | Configuration error (parse error, validation error)  |
-| `130`| Interrupted by user (SIGINT / Ctrl+C)                |
+| Code  | Meaning                                              |
+| ----- | ---------------------------------------------------- |
+| `0`   | Success                                              |
+| `1`   | Command execution failed (non-zero exit from script) |
+| `2`   | Configuration error (parse error, validation error)  |
+| `130` | Interrupted by user (SIGINT / Ctrl+C)                |
 
 The exit code from a failed shell command is propagated as the Lota exit code. If `fallback` succeeds after a failure, the exit code is `0`.
 

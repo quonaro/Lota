@@ -189,6 +189,8 @@ func PrintHelp(configPath string) {
 		return
 	}
 
+	fmt.Printf("Usage: %s <command> [args...]\n\n", strings.ToLower(shared.AppName))
+
 	fmt.Println("Commands:")
 
 	for _, group := range cfg.Groups {

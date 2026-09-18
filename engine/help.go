@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/quonaro/lota/config"
+	"github.com/quonaro/lota/runner"
 )
 
 var ansiColors = map[string]func(string, ...interface{}) string{
@@ -172,4 +173,148 @@ func PrintGroupHelp(cfg *config.AppConfig, groups []*config.Group, w io.Writer, 
 		_, _ = fmt.Fprintf(w, "  %s %s\n", paddedName(cmd.Name, c, 20), cmd.Desc)
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+// isFlagArg reports whether an argument is a flag (non-positional).
+func isFlagArg(arg config.Arg) bool {
+	if arg.Wildcard {
+		return false
+	}
+	return arg.Short != "" || arg.Type == "bool"
+}
+
+// separateArgs splits arguments into positional and flag arguments.
+func separateArgs(args []config.Arg) (positional, flags []config.Arg) {
+	for _, arg := range args {
+		if isFlagArg(arg) {
+			flags = append(flags, arg)
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+	return positional, flags
+}
+
+// usageArgName converts an argument name into an uppercase placeholder.
+func usageArgName(name string) string {
+	if name == "" {
+		return "ARG"
+	}
+	upper := strings.ToUpper(name)
+	b := strings.Builder{}
+	b.Grow(len(upper))
+	for i := 0; i < len(upper); i++ {
+		ch := upper[i]
+		if (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') {
+			b.WriteByte(ch)
+			continue
+		}
+		b.WriteByte('_')
+	}
+	if value := strings.Trim(b.String(), "_"); value != "" {
+		return value
+	}
+	return "ARG"
+}
+
+// formatPositionalUsage renders a single positional argument for the usage line.
+func formatPositionalUsage(arg config.Arg) string {
+	name := usageArgName(arg.Name)
+	if arg.Wildcard {
+		return "[...<" + name + ">]"
+	}
+	value := "<" + name + ">"
+	if arg.Type == "arr" {
+		value = "<" + name + "...>"
+	}
+	if arg.Required {
+		return value
+	}
+	return "[" + value + "]"
+}
+
+// PrintCommandHelp writes help for a specific command to w. It mirrors the
+// standalone CLI's command help but omits global CLI flags, which are
+// irrelevant for embedded applications.
+func PrintCommandHelp(cfg *config.AppConfig, result config.SearchResult, w io.Writer, appName string, verbose bool) {
+	if result.Command == nil {
+		return
+	}
+	if appName == "" {
+		appName = "app"
+	}
+
+	cmd := *result.Command
+
+	pathParts := make([]string, 0, len(result.Groups)+1)
+	for _, g := range result.Groups {
+		pathParts = append(pathParts, g.Name)
+	}
+	pathParts = append(pathParts, cmd.Name)
+	cmdName := strings.Join(pathParts, " ")
+
+	args := runner.ResolveArgs(*cfg, result.Groups, cmd)
+	positional, flags := separateArgs(args)
+
+	usage := strings.Builder{}
+	usage.WriteString("Usage: ")
+	usage.WriteString(appName)
+	usage.WriteString(" ")
+	usage.WriteString(cmdName)
+	if len(flags) > 0 {
+		usage.WriteString(" [OPTIONS]")
+	}
+	for _, arg := range positional {
+		usage.WriteString(" ")
+		usage.WriteString(formatPositionalUsage(arg))
+	}
+	_, _ = fmt.Fprintln(w, colorize(usage.String(), resolveColor(cmd.Color, cmd.InheritColor, result.Groups)))
+	_, _ = fmt.Fprintln(w)
+
+	if cmd.Desc != "" {
+		_, _ = fmt.Fprintf(w, "%s\n\n", cmd.Desc)
+	}
+
+	if len(positional) > 0 {
+		_, _ = fmt.Fprintln(w, "Arguments:")
+		for _, arg := range positional {
+			_, _ = fmt.Fprintf(w, "  %s\n", arg.Name)
+		}
+		_, _ = fmt.Fprintln(w)
+	}
+
+	if len(flags) > 0 {
+		_, _ = fmt.Fprintln(w, "Options:")
+		for _, arg := range flags {
+			names := make([]string, 0, 2)
+			if arg.Short != "" {
+				names = append(names, "-"+arg.Short)
+			}
+			names = append(names, "--"+arg.Name)
+			_, _ = fmt.Fprintf(w, "  %s\n", strings.Join(names, ", "))
+		}
+		_, _ = fmt.Fprintln(w)
+	}
+
+	if verbose {
+		if cmd.Dir != "" {
+			_, _ = fmt.Fprintf(w, "Directory:\n  %s\n\n", cmd.Dir)
+		}
+		if len(cmd.Depends) > 0 {
+			_, _ = fmt.Fprintln(w, "Depends:")
+			for _, dep := range cmd.Depends {
+				_, _ = fmt.Fprintf(w, "  - %s\n", dep)
+			}
+			_, _ = fmt.Fprintln(w)
+		}
+		if cmd.Script != "" {
+			_, _ = fmt.Fprintf(w, "Script:\n  %s\n\n", cmd.Script)
+		}
+		if cmd.Before != "" {
+			_, _ = fmt.Fprintf(w, "Before hook:\n  %s\n\n", cmd.Before)
+		}
+		if cmd.After != "" {
+			_, _ = fmt.Fprintf(w, "After hook:\n  %s\n\n", cmd.After)
+		}
+	}
 }

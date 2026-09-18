@@ -330,6 +330,126 @@ func TestRun_GroupError(t *testing.T) {
 	}
 }
 
+func TestRun_NoArgsWithoutAutoHelp(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{{Name: "build", Script: "echo build"}},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	if err := Run(context.Background(), cfg, nil, Options{}); err == nil {
+		t.Fatal("expected error when no command specified and AutoHelp is off")
+	}
+}
+
+func TestRun_AutoHelp_EmptyArgs(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{{Name: "build", Desc: "Build the project"}},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Run(context.Background(), cfg, nil, Options{AutoHelp: true, Stdout: &buf}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "build") {
+		t.Fatalf("expected top-level help, got: %q", buf.String())
+	}
+}
+
+func TestRun_AutoHelp_HelpFlag(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{{Name: "build", Desc: "Build the project"}},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"--help"}, Options{AutoHelp: true, Stdout: &buf}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Usage:") {
+		t.Fatalf("expected help output, got: %q", buf.String())
+	}
+}
+
+func TestRun_AutoHelp_CommandHelpFlag(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "build", Desc: "Build the project", RawArgs: []string{"target:str"}},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"build", "--help"}, Options{AutoHelp: true, Stdout: &buf}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Usage: app build") {
+		t.Fatalf("expected command usage, got: %q", out)
+	}
+	if !strings.Contains(out, "Build the project") {
+		t.Fatalf("expected command description, got: %q", out)
+	}
+}
+
+func TestRun_AutoHelp_GroupPath(t *testing.T) {
+	cfg := &config.AppConfig{
+		Groups: []config.Group{
+			{
+				Name: "admin",
+				Desc: "Administration tools",
+				Commands: []config.Command{
+					{Name: "users", Script: "echo users"},
+				},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"admin"}, Options{AutoHelp: true, Stdout: &buf}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Usage: app admin") {
+		t.Fatalf("expected group usage, got: %q", out)
+	}
+	if !strings.Contains(out, "users") {
+		t.Fatalf("expected group command listing, got: %q", out)
+	}
+}
+
+func TestApp_AutoHelpUsesAppName(t *testing.T) {
+	data := []byte(`
+build:
+  desc: Build project
+  script: echo build
+`)
+	app, err := NewBuilder("myapp", data).WithOptions(Options{AutoHelp: true}).Build()
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	app.opts.Stdout = &buf
+	if err := app.Run(context.Background(), nil); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Usage: myapp") {
+		t.Fatalf("expected help with app name, got: %q", buf.String())
+	}
+}
+
 func TestPrintGroupHelp(t *testing.T) {
 	cfg := &config.AppConfig{
 		Groups: []config.Group{

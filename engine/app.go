@@ -70,7 +70,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			opts.NativeHandlers = merged
 		}
 	}
-	return Run(ctx, a.cfg, args, opts)
+	return run(ctx, a.cfg, args, opts, a.name)
 }
 
 // PrintHelp writes top-level help to the configured stdout using the app name.
@@ -81,6 +81,11 @@ func (a *App) PrintHelp() {
 // PrintGroupHelp writes group-specific help to the configured stdout.
 func (a *App) PrintGroupHelp(groups []*config.Group) {
 	PrintGroupHelp(a.cfg, groups, a.opts.Stdout, a.name)
+}
+
+// PrintCommandHelp writes help for a single command to the configured stdout.
+func (a *App) PrintCommandHelp(result config.SearchResult, verbose bool) {
+	PrintCommandHelp(a.cfg, result, a.opts.Stdout, a.name, verbose)
 }
 
 // AppBuilder provides a class-like API for constructing an App.

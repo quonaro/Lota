@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -28,6 +29,11 @@ type Options struct {
 	Stderr          io.Writer
 	PrefixFormatter func(path string, cmd *config.Command, groups []*config.Group) string
 	NativeHandlers  map[string]NativeFunc // map of full command path to handler
+	// AutoHelp makes Run print help and return nil instead of failing when
+	// there is nothing to execute: no arguments, a -h/--help flag, or a path
+	// that resolves to a group rather than a command. This lets embedded
+	// binaries behave like the standalone CLI without boilerplate.
+	AutoHelp bool
 }
 
 func (o Options) formatPrefix(path string, cmd *config.Command, groups []*config.Group) string {
@@ -120,9 +126,23 @@ func LoadConfigFromPath(path string) (*config.AppConfig, string, error) {
 // Run is the CLI-style entrypoint. args contains the full command line,
 // for example []string{"deploy", "prod", "--force"}.
 func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options) error {
+	return run(ctx, cfg, args, opts, "")
+}
+
+// run is the shared implementation behind Run and App.Run. appName is only
+// used when opts.AutoHelp renders help; an empty value defaults to "app".
+func run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options, appName string) error {
 	logger.Debugf("engine: Run called with args: %v", args)
 	if len(args) == 0 {
+		if opts.AutoHelp {
+			PrintHelp(cfg, helpWriter(opts), appName)
+			return nil
+		}
 		return fmt.Errorf("no command specified. Use --help to see available commands")
+	}
+
+	if opts.AutoHelp && hasHelpFlag(args) {
+		return printHelpForArgs(cfg, args, opts, appName)
 	}
 
 	result, remainingArgs, _ := config.ResolveCommand(cfg, args)
@@ -135,6 +155,10 @@ func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options
 	}
 	logger.Debugf("engine: command resolved, executing")
 	if result.Command == nil {
+		if opts.AutoHelp {
+			PrintGroupHelp(cfg, result.Groups, helpWriter(opts), appName)
+			return nil
+		}
 		return &GroupError{
 			Path:   strings.Join(args, " "),
 			Groups: result.Groups,
@@ -142,6 +166,52 @@ func Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options
 	}
 
 	return runCommand(ctx, cfg, result, remainingArgs, opts)
+}
+
+// helpWriter returns the writer help should be rendered to, defaulting to
+// os.Stdout so AutoHelp never panics on an unset Options.Stdout.
+func helpWriter(opts Options) io.Writer {
+	if opts.Stdout != nil {
+		return opts.Stdout
+	}
+	return os.Stdout
+}
+
+// hasHelpFlag reports whether -h or --help appears anywhere in args.
+func hasHelpFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+// printHelpForArgs renders the most specific help for a command line that
+// contains a help flag: command help, group help, or top-level help.
+func printHelpForArgs(cfg *config.AppConfig, args []string, opts Options, appName string) error {
+	filtered := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	if len(filtered) == 0 {
+		PrintHelp(cfg, helpWriter(opts), appName)
+		return nil
+	}
+
+	result, _, _ := config.ResolveCommand(cfg, filtered)
+	switch {
+	case result.Command != nil:
+		PrintCommandHelp(cfg, result, helpWriter(opts), appName, opts.Verbose)
+	case len(result.Groups) > 0:
+		PrintGroupHelp(cfg, result.Groups, helpWriter(opts), appName)
+	default:
+		PrintHelp(cfg, helpWriter(opts), appName)
+	}
+	return nil
 }
 
 // RunCommand is the programmatic entrypoint. path is a dot-separated command

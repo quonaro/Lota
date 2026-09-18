@@ -87,7 +87,6 @@ package main
 import (
     "context"
     "embed"
-    "errors"
     "fmt"
     "os"
 
@@ -101,6 +100,7 @@ func main() {
     builder := engine.NewBuilder("myapp", lotaYAML)
     builder.RegisterNative("deploy", deployHandler)
     builder.RegisterNative("infra.status", statusHandler)
+    builder.WithOptions(engine.Options{AutoHelp: true})
 
     app, err := builder.Build()
     if err != nil {
@@ -108,17 +108,7 @@ func main() {
         os.Exit(1)
     }
 
-    if len(os.Args) < 2 {
-        app.PrintHelp()
-        return
-    }
-
     if err := app.Run(context.Background(), os.Args[1:]); err != nil {
-        var groupErr *engine.GroupError
-        if errors.As(err, &groupErr) {
-            app.PrintGroupHelp(groupErr.Groups)
-            return
-        }
         fmt.Fprintf(os.Stderr, "run: %v\n", err)
         os.Exit(1)
     }
@@ -143,6 +133,22 @@ func statusHandler(ctx context.Context, nctx engine.NativeContext) error {
 - **Native handlers are scoped** - Each app has its own handler registry
 - **Fluent API** - Chain method calls for clean code
 - **Type-safe** - Compile-time checking of handler registration
+
+**Automatic help (`Options.AutoHelp`):**
+
+Setting `AutoHelp: true` makes the embedded binary behave like the standalone
+CLI without any boilerplate. When enabled, `App.Run`/`engine.Run` print help
+and return `nil` instead of failing in these cases:
+
+| Input                    | Result         |
+| ------------------------ | -------------- |
+| no arguments             | top-level help |
+| `-h`, `--help`           | top-level help |
+| `build --help`           | command help   |
+| `admin --help` / `admin` | group help     |
+
+Without `AutoHelp`, `Run` returns an error for empty arguments and a
+`*GroupError` for a group path, leaving help rendering to the caller.
 
 ## Basic Usage
 
@@ -197,6 +203,7 @@ engine.PrintHelp(cfg, os.Stdout, "myapp")
 ```
 
 Output:
+
 ```
 Usage: myapp <command> [args...]
 
@@ -207,6 +214,15 @@ Commands:
 
 #### Group-specific help
 
+With `Options.AutoHelp`, just run the group path — help is printed
+automatically:
+
+```go
+err := engine.Run(ctx, cfg, []string{"admin"}, engine.Options{AutoHelp: true})
+```
+
+Without `AutoHelp`, `Run` returns a `*GroupError` and you render help yourself:
+
 ```go
 err := engine.Run(ctx, cfg, []string{"admin"}, opts)
 var groupErr *engine.GroupError
@@ -216,6 +232,7 @@ if errors.As(err, &groupErr) {
 ```
 
 Output:
+
 ```
 Usage: myapp admin <command> [args...]
 
@@ -224,6 +241,26 @@ Administration tools
 Commands:
   users                Manage users
   db                   Database tools
+```
+
+#### Command-specific help
+
+```go
+engine.PrintCommandHelp(cfg, result, os.Stdout, "myapp", false)
+```
+
+Output:
+
+```
+Usage: myapp deploy prod [OPTIONS] <ENV>
+
+Deploy the application
+
+Arguments:
+  env
+
+Options:
+  -f, --force
 ```
 
 ## Advanced Usage
@@ -276,6 +313,7 @@ opts := engine.Options{
     Stderr:          os.Stderr,               // Error writer
     PrefixFormatter: customPrefixFormatter,   // Custom dependency prefix
     NativeHandlers:  nativeHandlers,         // Native command handlers
+    AutoHelp:        true,                    // Print help for empty args / --help / groups
 }
 ```
 
@@ -387,10 +425,10 @@ type NativeContext struct {
 }
 ```
 
-| Field    | Description                                 |
-| -------- | ------------------------------------------- |
+| Field    | Description                                |
+| -------- | ------------------------------------------ |
 | `Vars`   | Resolved variables (app → group → command) |
-| `Args`   | Parsed CLI arguments with defaults applied  |
+| `Args`   | Parsed CLI arguments with defaults applied |
 | `Stdout` | Where to write command output              |
 | `Stderr` | Where to write errors and warnings         |
 
@@ -442,20 +480,22 @@ type Options struct {
     Stderr          io.Writer
     PrefixFormatter func(path string, cmd *config.Command, groups []*config.Group) string
     NativeHandlers  map[string]NativeFunc
+    AutoHelp        bool
 }
 ```
 
-| Field             | Description                                                            |
-| ----------------- | ---------------------------------------------------------------------- |
-| `Verbose`         | Enable verbose logging                                                  |
-| `DryRun`          | Print interpolated scripts without executing                           |
-| `ConfigDir`       | Base directory for resolving relative paths                             |
-| `WorkingDir`      | Caller's current working directory; used for `$CWD` interpolation       |
-| `Timeout`         | Maximum execution time (0 = no timeout)                                |
-| `Stdout`          | Where command output is written (defaults to `os.Stdout` if nil)       |
-| `Stderr`          | Where errors are written (defaults to `os.Stderr` if nil)               |
-| `PrefixFormatter` | Optional formatter for dependency output prefixes                     |
-| `NativeHandlers`  | Map of full command path to native handler                             |
+| Field             | Description                                                                     |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `Verbose`         | Enable verbose logging                                                          |
+| `DryRun`          | Print interpolated scripts without executing                                    |
+| `ConfigDir`       | Base directory for resolving relative paths                                     |
+| `WorkingDir`      | Caller's current working directory; used for `$CWD` interpolation               |
+| `Timeout`         | Maximum execution time (0 = no timeout)                                         |
+| `Stdout`          | Where command output is written (defaults to `os.Stdout` if nil)                |
+| `Stderr`          | Where errors are written (defaults to `os.Stderr` if nil)                       |
+| `PrefixFormatter` | Optional formatter for dependency output prefixes                               |
+| `NativeHandlers`  | Map of full command path to native handler                                      |
+| `AutoHelp`        | Print help (instead of erroring) for empty args, `-h`/`--help`, or a group path |
 
 #### `engine.NativeContext`
 
@@ -483,7 +523,7 @@ type GroupError struct {
 }
 ```
 
-Returned by `engine.Run` when the resolved path points to a group rather than a command.
+Returned by `engine.Run` when the resolved path points to a group rather than a command and `Options.AutoHelp` is `false`.
 
 ### Functions
 
@@ -497,7 +537,7 @@ Reads a config file from the given path, parses it, and returns both the config 
 
 #### `engine.Run(ctx context.Context, cfg *config.AppConfig, args []string, opts Options) error`
 
-CLI-style entrypoint. `args` is the full command line (e.g., `[]string{"deploy", "prod", "--force"}`).
+CLI-style entrypoint. `args` is the full command line (e.g., `[]string{"deploy", "prod", "--force"}`). With `Options.AutoHelp`, empty arguments, a `-h`/`--help` flag, or a group path print help and return `nil`.
 
 #### `engine.RunCommand(ctx context.Context, cfg *config.AppConfig, path string, cmdArgs []string, opts Options) error`
 
@@ -510,6 +550,10 @@ Writes top-level help to `w`.
 #### `engine.PrintGroupHelp(cfg *config.AppConfig, groups []*config.Group, w io.Writer, appName string)`
 
 Writes group-specific help to `w`.
+
+#### `engine.PrintCommandHelp(cfg *config.AppConfig, result config.SearchResult, w io.Writer, appName string, verbose bool)`
+
+Writes help for a single command to `w`. When `verbose` is true, the script, hooks, directory, and dependencies are included.
 
 ### Builder API
 
@@ -554,6 +598,10 @@ Writes top-level help to the configured stdout.
 #### `(*App) PrintGroupHelp(groups []*config.Group)`
 
 Writes group-specific help to the configured stdout.
+
+#### `(*App) PrintCommandHelp(result config.SearchResult, verbose bool)`
+
+Writes help for a single command to the configured stdout.
 
 #### `(*App) Config() *config.AppConfig`
 
@@ -604,6 +652,7 @@ native command "deploy" has no registered handler
 ```
 
 Ensure you:
+
 1. Marked the command with `native: true` in YAML
 2. Registered a handler with the correct full path (e.g., `"admin.users.reset-password"` for nested commands)
 3. Called `Build()` after registering handlers
@@ -622,12 +671,12 @@ app, err := engine.NewAppFromPath("/etc/myapp/lota.yml", opts)
 
 ## Comparison with CLI Mode
 
-| Feature               | `cli.Run(ctx)`                | `engine.Run(ctx, cfg, args, opts)` |
-| --------------------- | ----------------------------- | ---------------------------------- |
-| `os.Args`             | Reads directly                | Accepts explicit `[]string`        |
-| `os.Exit`             | Uses `os.Exit` for completion | Never calls `os.Exit`              |
-| Output                | Hardcoded `os.Stdout/Stderr`  | Configurable `io.Writer`           |
-| Config source         | Filesystem only               | Can use `[]byte` / `io.Reader`     |
-| Help/Completion       | Built-in                      | `engine.PrintHelp` (no CLI flags)  |
-| Native handlers       | Global                        | Per-app (scoped)                   |
-| Use case              | Standalone binary             | Embedded library                   |
+| Feature         | `cli.Run(ctx)`                | `engine.Run(ctx, cfg, args, opts)` |
+| --------------- | ----------------------------- | ---------------------------------- |
+| `os.Args`       | Reads directly                | Accepts explicit `[]string`        |
+| `os.Exit`       | Uses `os.Exit` for completion | Never calls `os.Exit`              |
+| Output          | Hardcoded `os.Stdout/Stderr`  | Configurable `io.Writer`           |
+| Config source   | Filesystem only               | Can use `[]byte` / `io.Reader`     |
+| Help/Completion | Built-in                      | `engine.PrintHelp` (no CLI flags)  |
+| Native handlers | Global                        | Per-app (scoped)                   |
+| Use case        | Standalone binary             | Embedded library                   |

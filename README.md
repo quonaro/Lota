@@ -16,6 +16,7 @@ A configurable task runner for rapid development. Define commands in a YAML file
 - 📁 **Working directory** — Set `dir` per group or command. Relative paths resolve against the config file; use `$CWD` to run from the current directory.
 - 📝 **Tee logging** — Mirror command output to log files while still printing to the terminal. Logs are inherited down the group tree and can be made `independent`.
 - 🔗 **Command dependencies** — Declare `depends` with full dot-paths. Independent dependencies run in parallel by default, shared ones run once, and circular dependencies are detected automatically.
+- 🩺 **Service readiness** — Docker Compose-style `wait` modes (`done`, `ready`, `started`) plus a `ready` probe block, so services can gate dependents on actual health, not just process start.
 - 🔍 **Upward config search** — Run commands from any subdirectory: Lota walks up looking for `lota.yml`/`lota.yaml`. A `.git` directory is a soft boundary — Lota still checks one level above it, so a shared config works for nested repos.
 - 🎨 **Colored help** — Highlight group and command names with named ANSI colors or hex values (e.g. `#FF5733`).
 - ⏱️ **Command timeout** — Set a per-run timeout with `--timeout 5m`.
@@ -112,6 +113,7 @@ lota dev test
 | Nested groups             | ✅   | ✅   | ❌   | ❌          |
 | Working directory (`dir`) | ✅   | ✅   | ❌   | ❌          |
 | Command dependencies      | ✅   | ✅   | ✅   | ❌          |
+| Service readiness probes  | ✅   | ❌   | ❌   | ❌          |
 | Upward config search      | ✅   | ❌   | ❌   | ❌          |
 | Env file imports          | ✅   | ✅   | ❌   | ❌          |
 | Shell auto-detection      | ✅   | ❌   | ❌   | ❌          |
@@ -256,7 +258,15 @@ group-name: # command group
       finally: ... # Optional: always-runs cleanup hook
       depends: # Optional: commands to run before this one
         - other-command
+        - name: infra-dev # mapping form with wait mode
+          wait: ready # done (default) | ready | started
       parallel: true # Optional: run dependencies in parallel (default: true)
+      ready: # Optional: readiness probe used by `wait: ready` dependents
+        script: curl -sf http://localhost:9000/health
+        interval: 2s # Optional (default: 1s)
+        timeout: 5s # Optional per-attempt timeout (default: 5s)
+        retries: 30 # Optional (default: 30)
+        start_period: 10s # Optional: early failures don't count
       native: true # Optional: mark as native Go command (embedded mode only)
       log: # Optional: command-level tee logging
         path: cmd.log
@@ -588,6 +598,31 @@ ci:
 ```
 
 > Shared dependencies are executed **once** (deduplication). If `build` is a dependency of both `test` and `deploy`, running `lota deploy` will execute `build` exactly once.
+
+#### Waiting for services (`wait` + `ready`)
+
+A plain dependency is satisfied when its process **exits** — that doesn't work for long-running services. Like Docker Compose's `depends_on: {condition: service_healthy}`, a command can expose a `ready` probe, and dependents can wait for readiness:
+
+```yaml
+infra-dev:
+  script: docker compose up
+  ready:                                # readiness probe of this command
+    script: curl -sf http://localhost:9000/minio/health/live
+    interval: 2s                        # optional, default 1s
+    timeout: 5s                         # optional per-attempt, default 5s
+    retries: 30                         # optional, default 30
+    # start_period: 10s                 # optional: warm-up failures don't count
+
+backend-dev:
+  script: air -c .air.toml
+  depends:
+    - name: infra-dev
+      wait: ready                       # backend starts only when S3 answers
+```
+
+Wait modes: `done` (default — process exits 0), `ready` (probe passes; service keeps running), `started` (launch only, no waiting). When `wait` is omitted the mode is **auto**: `ready` if the target has a `ready` block, `done` otherwise — so plain string entries keep working unchanged.
+
+If the service exits before becoming ready or the probe exhausts `retries`, the run fails and all siblings are cancelled. In `--dry-run` mode probes are skipped.
 
 > **TODO:** A TUI for interactive task monitoring is under consideration for future versions.
 

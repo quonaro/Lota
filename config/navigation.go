@@ -100,6 +100,21 @@ func FindCommandByPath(cfg *AppConfig, path string) (SearchResult, error) {
 	return result, nil
 }
 
+// stricterWait returns the stricter of two wait modes. Explicit modes
+// always beat auto (""), and done > ready > started.
+func stricterWait(a, b string) string {
+	rank := map[string]int{
+		"":          0,
+		WaitStarted: 1,
+		WaitReady:   2,
+		WaitDone:    3,
+	}
+	if rank[b] > rank[a] {
+		return b
+	}
+	return a
+}
+
 // CommandPath builds the dot-separated path for a command.
 func CommandPath(cmd *Command, groups []*Group) string {
 	parts := make([]string, 0, len(groups)+1)
@@ -120,6 +135,7 @@ func ResolveDependencies(cfg *AppConfig, result SearchResult) ([]SearchResult, e
 
 	visited := make(map[string]bool)
 	completed := make(map[string]bool)
+	depWait := make(map[string]string)
 	var order []SearchResult
 
 	var visit func(cmd *Command, groups []*Group) error
@@ -135,12 +151,14 @@ func ResolveDependencies(cfg *AppConfig, result SearchResult) ([]SearchResult, e
 
 		visited[path] = true
 
-		for _, depPath := range cmd.Depends {
-			logger.Debugf("config: processing dependency: %s", depPath)
-			depResult, err := FindCommandByPath(cfg, depPath)
+		for _, dep := range cmd.Depends {
+			logger.Debugf("config: processing dependency: %s", dep.Name)
+			depResult, err := FindCommandByPath(cfg, dep.Name)
 			if err != nil {
-				return fmt.Errorf("dependency %q of %s: %w", depPath, path, err)
+				return fmt.Errorf("dependency %q of %s: %w", dep.Name, path, err)
 			}
+			depPath := CommandPath(depResult.Command, depResult.Groups)
+			depWait[depPath] = stricterWait(depWait[depPath], dep.Wait)
 			if err := visit(depResult.Command, depResult.Groups); err != nil {
 				return err
 			}
@@ -164,6 +182,13 @@ func ResolveDependencies(cfg *AppConfig, result SearchResult) ([]SearchResult, e
 	// Remove the target command itself (last in order)
 	if len(order) > 0 {
 		order = order[:len(order)-1]
+	}
+
+	// When several edges reference the same dependency with different wait
+	// modes, the strictest one wins — a relaxed edge must not silently
+	// downgrade a consumer that needs readiness.
+	for i := range order {
+		order[i].Wait = depWait[CommandPath(order[i].Command, order[i].Groups)]
 	}
 
 	logger.Debugf("config: resolved %d dependencies", len(order))

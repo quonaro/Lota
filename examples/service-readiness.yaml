@@ -1,0 +1,48 @@
+# Service Readiness Example
+# Docker Compose-style gating: dependents wait until a service's `ready`
+# probe passes — not just until the process starts.
+#
+# Try it:
+#   lota --config examples/service-readiness.yaml dev
+#
+# `api` prints "started" only after `db`'s ready probe succeeds (~1s).
+
+shell: bash
+
+db:
+  desc: Fake database that takes ~1s to boot
+  script: |
+    sleep 1
+    mkdir -p .lota-demo
+    touch .lota-demo/db-ready
+    echo "db: accepting connections"
+    sleep 300   # keep "running" like a real service
+  ready:                                # readiness probe of THIS command
+    script: test -f .lota-demo/db-ready # exit 0 => ready
+    interval: 200ms                     # poll every 200ms (default 1s)
+    timeout: 2s                         # per-attempt timeout (default 5s)
+    retries: 30                         # max consecutive failures (default 30)
+    # start_period: 5s                  # failures inside this window don't count
+  finally: rm -f .lota-demo/db-ready    # cleanup on shutdown
+
+api:
+  desc: API server (starts only when db is ready)
+  script: 'echo "api: started (db is ready)"'
+  depends:
+    - name: db
+      wait: ready                       # done | ready | started
+
+worker:
+  desc: Fire-and-forget worker
+  script: 'echo "worker: launched"'
+  depends:
+    - name: db
+      wait: started                     # just launch db, don't wait
+
+dev:
+  desc: Start the whole stack
+  script: echo "=== stack is up ==="
+  depends:
+    - api                               # string form: auto => done (api has no `ready`)
+    - name: worker
+      wait: started

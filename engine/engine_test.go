@@ -26,9 +26,9 @@ func TestResolveDependencyLevels(t *testing.T) {
 	cfg := &config.AppConfig{
 		Commands: []config.Command{
 			{Name: "compile", Script: "echo compile"},
-			{Name: "build", Script: "echo build", Depends: []string{"compile"}},
+			{Name: "build", Script: "echo build", Depends: []config.Dependency{{Name: "compile"}}},
 			{Name: "lint", Script: "echo lint"},
-			{Name: "test", Script: "echo test", Depends: []string{"build", "lint"}},
+			{Name: "test", Script: "echo test", Depends: []config.Dependency{{Name: "build"}, {Name: "lint"}}},
 		},
 	}
 	if err := cfg.BuildIndexes(); err != nil {
@@ -70,7 +70,7 @@ func TestResolveDependencyLevels_ParallelFalse(t *testing.T) {
 		Commands: []config.Command{
 			{Name: "a", Script: "echo a"},
 			{Name: "b", Script: "echo b"},
-			{Name: "c", Script: "echo c", Depends: []string{"a", "b"}},
+			{Name: "c", Script: "echo c", Depends: []config.Dependency{{Name: "a"}, {Name: "b"}}},
 		},
 	}
 	if err := cfg.BuildIndexes(); err != nil {
@@ -95,7 +95,7 @@ func TestRunCommand_SequentialPrintsDependencyProgress(t *testing.T) {
 	cfg := &config.AppConfig{
 		Commands: []config.Command{
 			{Name: "build", Script: "echo build >/dev/null"},
-			{Name: "test", Script: "echo test >/dev/null", Depends: []string{"build"}, Parallel: &parallelFalse},
+			{Name: "test", Script: "echo test >/dev/null", Depends: []config.Dependency{{Name: "build"}}, Parallel: &parallelFalse},
 		},
 	}
 	if err := cfg.BuildIndexes(); err != nil {
@@ -119,7 +119,7 @@ func TestRunCommand_ParallelDoesNotBlockLevels(t *testing.T) {
 	cfg := &config.AppConfig{
 		Commands: []config.Command{
 			{Name: "server", Script: "sleep 30"},
-			{Name: "client", Script: "echo client", Depends: []string{"server"}},
+			{Name: "client", Script: "echo client", Depends: []config.Dependency{{Name: "server"}}},
 		},
 	}
 	if err := cfg.BuildIndexes(); err != nil {
@@ -447,6 +447,186 @@ build:
 	}
 	if !strings.Contains(buf.String(), "Usage: myapp") {
 		t.Fatalf("expected help with app name, got: %q", buf.String())
+	}
+}
+
+func TestRun_ReadyWaitsForService(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ready.marker")
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{
+				Name:   "svc",
+				Script: "sleep 0.2 && touch " + marker + " && sleep 0.6",
+				Ready: &config.ReadyCheck{
+					Script:   "test -f " + marker,
+					Interval: 20 * time.Millisecond,
+				},
+			},
+			{
+				Name:    "app",
+				Script:  "test -f " + marker,
+				Depends: []config.Dependency{{Name: "svc", Wait: "ready"}},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	start := time.Now()
+	err := Run(context.Background(), cfg, []string{"app"}, Options{Stdout: &stdout, Stderr: &stdout})
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("run took %v — dependency was awaited to completion instead of readiness", elapsed)
+	}
+	if !strings.Contains(stdout.String(), "svc is ready") {
+		t.Errorf("expected readiness message, got: %q", stdout.String())
+	}
+}
+
+func TestRun_ReadyImplicitWait(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ready.marker")
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{
+				Name:   "svc",
+				Script: "touch " + marker + " && sleep 0.6",
+				Ready:  &config.ReadyCheck{Script: "test -f " + marker, Interval: 20 * time.Millisecond},
+			},
+			{
+				Name:    "app",
+				Script:  "test -f " + marker,
+				Depends: []config.Dependency{{Name: "svc"}}, // no wait — auto ready
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"app"}, Options{Stdout: &stdout, Stderr: &stdout}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+}
+
+func TestRun_WaitStarted(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "started.marker")
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "svc", Script: "sleep 0.6"},
+			{
+				Name:    "app",
+				Script:  "touch " + marker,
+				Depends: []config.Dependency{{Name: "svc", Wait: "started"}},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	start := time.Now()
+	if err := Run(context.Background(), cfg, []string{"app"}, Options{}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("wait:started blocked for %v", elapsed)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("app did not run: %v", err)
+	}
+}
+
+func TestRun_ReadyExitedEarly(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{
+				Name:   "svc",
+				Script: "exit 1",
+				Ready:  &config.ReadyCheck{Script: "false", Interval: 10 * time.Millisecond},
+			},
+			{
+				Name:    "app",
+				Script:  "echo app",
+				Depends: []config.Dependency{{Name: "svc", Wait: "ready"}},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	err := Run(context.Background(), cfg, []string{"app"}, Options{})
+	if err == nil {
+		t.Fatal("expected error when service exits before ready")
+	}
+	if !strings.Contains(err.Error(), "before becoming ready") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRun_ReadyRetriesExhausted(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{
+				Name:   "svc",
+				Script: "sleep 5",
+				Ready: &config.ReadyCheck{
+					Script:   "false",
+					Interval: 10 * time.Millisecond,
+					Retries:  2,
+				},
+			},
+			{
+				Name:    "app",
+				Script:  "echo app",
+				Depends: []config.Dependency{{Name: "svc", Wait: "ready"}},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	err := Run(context.Background(), cfg, []string{"app"}, Options{})
+	if err == nil {
+		t.Fatal("expected error when readiness retries exhausted")
+	}
+	if !strings.Contains(err.Error(), "did not become ready") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRun_ReadyDryRunSkipsProbe(t *testing.T) {
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{
+				Name:   "svc",
+				Script: "sleep 5",
+				Ready:  &config.ReadyCheck{Script: "false"},
+			},
+			{
+				Name:    "app",
+				Script:  "echo app",
+				Depends: []config.Dependency{{Name: "svc", Wait: "ready"}},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	start := time.Now()
+	if err := Run(context.Background(), cfg, []string{"app"}, Options{DryRun: true, Stdout: &stdout, Stderr: &stdout}); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("dry-run blocked %v on readiness probe", elapsed)
 	}
 }
 

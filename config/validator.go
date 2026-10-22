@@ -55,5 +55,63 @@ func (c ConfigValidator) Validate() ValidationResult {
 		return result
 	}
 
+	// Validate dependencies: names must resolve, wait values must be valid,
+	// and wait:ready requires a ready check on the target.
+	if err := c.validateDependencies(); err != nil {
+		result.Error = err
+		return result
+	}
+
 	return result
+}
+
+// validateDependencies walks all commands (including nested groups) and
+// validates each depends entry.
+func (c *AppConfig) validateDependencies() error {
+	for i := range c.Commands {
+		if err := c.validateCommandDeps(&c.Commands[i]); err != nil {
+			return err
+		}
+	}
+	for i := range c.Groups {
+		if err := c.validateGroupDeps(&c.Groups[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *AppConfig) validateGroupDeps(g *Group) error {
+	for i := range g.Commands {
+		if err := c.validateCommandDeps(&g.Commands[i]); err != nil {
+			return err
+		}
+	}
+	for i := range g.Groups {
+		if err := c.validateGroupDeps(&g.Groups[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *AppConfig) validateCommandDeps(cmd *Command) error {
+	if cmd.Ready != nil && cmd.Ready.Script == "" {
+		return fmt.Errorf("command %q: ready block requires a script", cmd.Name)
+	}
+	for _, dep := range cmd.Depends {
+		switch dep.Wait {
+		case "", WaitDone, WaitReady, WaitStarted:
+		default:
+			return fmt.Errorf("command %q: invalid wait %q for dependency %q (valid: done, ready, started)", cmd.Name, dep.Wait, dep.Name)
+		}
+		target, err := FindCommandByPath(c, dep.Name)
+		if err != nil {
+			return fmt.Errorf("command %q: %w", cmd.Name, err)
+		}
+		if dep.Wait == WaitReady && target.Command.Ready == nil {
+			return fmt.Errorf("command %q: dependency %q has wait %q but defines no ready block", cmd.Name, dep.Name, WaitReady)
+		}
+	}
+	return nil
 }

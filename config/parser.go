@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/quonaro/lota/internal/levenshtein"
 	"github.com/quonaro/lota/logger"
@@ -95,7 +96,7 @@ func hasField(node *yaml.Node, field string) bool {
 }
 
 var groupFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "shell", "log"}
-var commandFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log", "native"}
+var commandFields = []string{"desc", "dir", "color", "inherit_color", "show", "vars", "args", "script", "before", "after", "fallback", "finally", "depends", "parallel", "shell", "log", "native", "ready"}
 
 func isCommandOnlyField(field string) bool {
 	for _, f := range commandFields {
@@ -561,6 +562,12 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 			if err := valueNode.Decode(&c.Depends); err != nil {
 				return fmt.Errorf("failed to parse depends in command %q at line %d: %w", c.Name, valueNode.Line, err)
 			}
+		case "ready":
+			var ready ReadyCheck
+			if err := valueNode.Decode(&ready); err != nil {
+				return fmt.Errorf("failed to parse ready in command %q at line %d: %w", c.Name, valueNode.Line, err)
+			}
+			c.Ready = &ready
 		case "parallel":
 			var parallel bool
 			if err := valueNode.Decode(&parallel); err != nil {
@@ -582,6 +589,73 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 		}
 	}
 
+	return nil
+}
+
+// UnmarshalYAML accepts a plain string (`- build`) or a mapping
+// (`- name: build` with optional `wait`).
+func (d *Dependency) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		d.Name = node.Value
+		return nil
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i].Value
+			valueNode := node.Content[i+1]
+			switch key {
+			case "name":
+				d.Name = valueNode.Value
+			case "wait":
+				d.Wait = valueNode.Value
+			default:
+				return fmt.Errorf("unknown field %q in depends entry at line %d (valid: name, wait)", key, node.Content[i].Line)
+			}
+		}
+		if d.Name == "" {
+			return fmt.Errorf("depends entry requires a name at line %d", node.Line)
+		}
+		return nil
+	default:
+		return fmt.Errorf("depends entry must be a string or a mapping at line %d, got %s", node.Line, nodeKindName(node.Kind))
+	}
+}
+
+// UnmarshalYAML parses the ready check block. All fields except `script`
+// are optional; durations use Go syntax (e.g. "2s", "500ms").
+func (r *ReadyCheck) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("ready must be a mapping block at line %d, got %s", node.Line, nodeKindName(node.Kind))
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		valueNode := node.Content[i+1]
+		switch key {
+		case "script":
+			r.Script = valueNode.Value
+		case "interval", "timeout", "start_period":
+			d, err := time.ParseDuration(valueNode.Value)
+			if err != nil {
+				return fmt.Errorf("invalid %s %q at line %d: %w", key, valueNode.Value, valueNode.Line, err)
+			}
+			switch key {
+			case "interval":
+				r.Interval = d
+			case "timeout":
+				r.Timeout = d
+			case "start_period":
+				r.StartPeriod = d
+			}
+		case "retries":
+			var n int
+			if err := valueNode.Decode(&n); err != nil {
+				return fmt.Errorf("invalid retries value %q at line %d: %w", valueNode.Value, valueNode.Line, err)
+			}
+			r.Retries = n
+		default:
+			return fmt.Errorf("unknown field %q in ready block at line %d (valid: script, interval, timeout, retries, start_period)", key, node.Content[i].Line)
+		}
+	}
 	return nil
 }
 

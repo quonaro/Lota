@@ -293,7 +293,11 @@ func printCommandScripts(cmd config.Command) {
 	if len(cmd.Depends) > 0 {
 		fmt.Println("Depends:")
 		for _, dep := range cmd.Depends {
-			fmt.Printf("  - %s\n", dep)
+			if dep.Wait != "" {
+				fmt.Printf("  - %s (wait: %s)\n", dep.Name, dep.Wait)
+			} else {
+				fmt.Printf("  - %s\n", dep.Name)
+			}
 		}
 		fmt.Println()
 	}

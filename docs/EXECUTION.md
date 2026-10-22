@@ -200,6 +200,44 @@ $ lota a
 error: circular dependency detected: a → b → a
 ```
 
+### Waiting for Services (`wait` + `ready`)
+
+By default a dependency is satisfied when its process **exits** — that does
+not work for services that run forever. Like Docker Compose's
+`depends_on: {condition: service_healthy}`, a dependency can declare a wait
+mode, and a command can declare a `ready` probe:
+
+```yaml
+infra-dev:
+  script: docker compose up
+  ready:
+    script: curl -sf http://localhost:9000/minio/health/live
+    interval: 2s       # default 1s
+    timeout: 5s        # per attempt, default 5s
+    retries: 30        # default 30
+
+backend-dev:
+  script: air -c .air.toml
+  depends:
+    - name: infra-dev
+      wait: ready      # done | ready | started
+```
+
+Wait modes:
+
+- `done` — dependency must exit with code 0 (default).
+- `ready` — dependency starts in the background; the level is passed once
+  the `ready` probe succeeds. The service keeps running; if it exits with an
+  error later, the whole run is aborted.
+- `started` — dependency is merely launched; no waiting at all.
+
+Omitting `wait` means **auto**: `ready` when the target has a `ready` block,
+`done` otherwise. Plain-string `depends` entries stay backward compatible.
+
+If the service process exits before becoming ready, or the probe exhausts
+`retries`, the run fails. `start_period` (optional) ignores probe failures
+during the warm-up window, mirroring Docker's `start_period`.
+
 ---
 
 ## Parallel Execution

@@ -122,8 +122,9 @@ Commands are the executable units. A mapping is recognized as a command if it co
 | `after`         | string      | —           | Post-success hook                                        |
 | `fallback`      | string      | —           | Error recovery hook                                      |
 | `finally`       | string      | —           | Always-runs cleanup hook                                 |
-| `depends`       | list\[str\] | `[]`        | Commands to run before this one (dot-separated paths)    |
+| `depends`       | list\[Dep\] | `[]`        | Commands to run before this one (dot-separated paths)    |
 | `parallel`      | bool        | `true`      | Run dependencies in parallel (`false` for sequential)    |
+| `ready`         | ReadyCheck  | —           | Readiness probe for `wait: ready` dependents             |
 | `native`        | bool        | `false`     | Mark as native Go command (embedded mode only)           |
 | `log`           | LogConfig   | —           | Command-level tee logging                                |
 
@@ -511,6 +512,50 @@ ci:
 ```
 
 When `parallel: true` (default), dependencies at the same level run concurrently with colored output prefixes. When `false`, dependencies run sequentially with `=> Running dependency: <path>` messages.
+
+### Wait Modes and Readiness (`ready`)
+
+For long-running services (e.g. `docker compose up`, watchers) a plain
+string dependency would wait for the process to exit — which never happens.
+The mapping form lets you pick a wait mode per edge:
+
+```yaml
+infra-dev:
+  script: docker compose up
+  ready:                                # readiness probe of THIS command
+    script: curl -sf http://localhost:9000/minio/health/live
+    interval: 2s                        # default 1s
+    timeout: 5s                         # per-attempt, default 5s
+    retries: 30                         # max failures, default 30
+    # start_period: 10s                 # failures before this don't count
+
+backend-dev:
+  script: air -c .air.toml
+  depends:
+    - name: infra-dev
+      wait: ready                       # start backend only when S3 answers
+```
+
+`wait` values:
+
+| Value     | The dependency is satisfied when...                                     |
+| --------- | ----------------------------------------------------------------------- |
+| `done`    | the process exits with code 0 (default for commands without `ready`)    |
+| `ready`   | its `ready.script` probe exits 0; the process keeps running             |
+| `started` | the process has been launched (no waiting at all)                       |
+
+When `wait` is omitted the mode is **auto**: `ready` if the target defines a
+`ready` block, `done` otherwise. A plain `- infra-dev` entry therefore still
+means `done`, and becomes `ready` automatically if the target has `ready:`.
+
+Notes:
+
+- `wait: ready` on a command without a `ready` block is a validation error.
+- A service dependency that exits **before** becoming ready fails the run;
+  if it exits **after**, the whole run is aborted too (non-zero exit).
+- The `ready` probe runs in the command's own context (shell, vars, dir)
+  with output discarded. `ready.script` supports variable interpolation.
+- In `--dry-run` mode probes are skipped.
 
 ---
 

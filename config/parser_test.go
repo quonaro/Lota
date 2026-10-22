@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -448,10 +449,84 @@ vars:
 				if len(cmd.Depends) != 2 {
 					t.Errorf("Expected 2 depends, got %d", len(cmd.Depends))
 				}
-				if cmd.Depends[0] != "build" || cmd.Depends[1] != "lint" {
+				if cmd.Depends[0].Name != "build" || cmd.Depends[1].Name != "lint" {
 					t.Errorf("Depends = %v, want [build, lint]", cmd.Depends)
 				}
 			},
+		},
+		{
+			name: "command with depends mapping and ready block",
+			yamlContent: `infra:
+  desc: Infra
+  script: docker compose up
+  ready:
+    script: curl -sf http://localhost:9000/health
+    interval: 2s
+    retries: 10
+
+app:
+  desc: App
+  depends:
+    - name: infra
+      wait: ready
+  script: go run .
+`,
+			wantErr: false,
+			check: func(t *testing.T, cfg *AppConfig) {
+				if len(cfg.Commands) != 2 {
+					t.Errorf("Expected 2 commands, got %d", len(cfg.Commands))
+					return
+				}
+				infra := cfg.Commands[0]
+				if infra.Ready == nil {
+					t.Fatal("expected ready block")
+				}
+				if infra.Ready.Script != "curl -sf http://localhost:9000/health" {
+					t.Errorf("Ready.Script = %q", infra.Ready.Script)
+				}
+				if infra.Ready.Interval != 2*time.Second {
+					t.Errorf("Ready.Interval = %v, want 2s", infra.Ready.Interval)
+				}
+				if infra.Ready.Retries != 10 {
+					t.Errorf("Ready.Retries = %v, want 10", infra.Ready.Retries)
+				}
+				app := cfg.Commands[1]
+				if len(app.Depends) != 1 || app.Depends[0].Name != "infra" || app.Depends[0].Wait != "ready" {
+					t.Errorf("Depends = %+v", app.Depends)
+				}
+			},
+		},
+		{
+			name: "depends entry with unknown field fails",
+			yamlContent: `app:
+  desc: App
+  depends:
+    - name: infra
+      typo: ready
+  script: go run .
+`,
+			wantErr: true,
+		},
+		{
+			name: "depends entry without name fails",
+			yamlContent: `app:
+  desc: App
+  depends:
+    - wait: ready
+  script: go run .
+`,
+			wantErr: true,
+		},
+		{
+			name: "ready block with invalid duration fails",
+			yamlContent: `infra:
+  desc: Infra
+  script: up
+  ready:
+    script: true
+    interval: forever
+`,
+			wantErr: true,
 		},
 		{
 			name: "group with color and inherit_color",

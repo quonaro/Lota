@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 )
 
 type LogConfig struct {
@@ -54,22 +55,54 @@ type Command struct {
 	Shell        string `yaml:"shell,omitempty"`
 	Dir          string `yaml:"dir,omitempty"`
 	Name         string
-	Desc         string     `yaml:"desc"`
-	Color        string     `yaml:"color,omitempty"`
-	InheritColor *bool      `yaml:"inherit_color,omitempty"`
-	Show         *bool      `yaml:"show,omitempty"`
-	Vars         []Var      `yaml:"vars"`
-	Args         []Arg      `yaml:"-"`
-	RawArgs      []string   `yaml:"args"`
-	Log          *LogConfig `yaml:"log,omitempty"`
-	Depends      []string   `yaml:"depends,omitempty"`
-	Parallel     *bool      `yaml:"parallel,omitempty"`
-	Script       string     `yaml:"script"`
-	Before       string     `yaml:"before"`
-	After        string     `yaml:"after"`
-	Fallback     string     `yaml:"fallback"`
-	Finally      string     `yaml:"finally"`
-	Native       bool       `yaml:"native,omitempty"`
+	Desc         string       `yaml:"desc"`
+	Color        string       `yaml:"color,omitempty"`
+	InheritColor *bool        `yaml:"inherit_color,omitempty"`
+	Show         *bool        `yaml:"show,omitempty"`
+	Vars         []Var        `yaml:"vars"`
+	Args         []Arg        `yaml:"-"`
+	RawArgs      []string     `yaml:"args"`
+	Log          *LogConfig   `yaml:"log,omitempty"`
+	Depends      []Dependency `yaml:"depends,omitempty"`
+	Parallel     *bool        `yaml:"parallel,omitempty"`
+	Ready        *ReadyCheck  `yaml:"ready,omitempty"`
+	Script       string       `yaml:"script"`
+	Before       string       `yaml:"before"`
+	After        string       `yaml:"after"`
+	Fallback     string       `yaml:"fallback"`
+	Finally      string       `yaml:"finally"`
+	Native       bool         `yaml:"native,omitempty"`
+}
+
+// Dependency wait modes.
+const (
+	// WaitDone waits until the dependency process exits with code 0 (default
+	// for commands without a ready check).
+	WaitDone = "done"
+	// WaitReady starts the dependency in the background and waits until its
+	// ready check passes. The process keeps running afterwards.
+	WaitReady = "ready"
+	// WaitStarted only waits until the dependency process has been launched.
+	WaitStarted = "started"
+)
+
+// Dependency is a single entry of Command.Depends. A plain string entry
+// unmarshals into Dependency{Name: s}; the mapping form additionally
+// accepts `wait`. An empty Wait means "auto": ready when the target
+// defines a ready check, done otherwise.
+type Dependency struct {
+	Name string
+	Wait string
+}
+
+// ReadyCheck defines a readiness probe for a command. Script is required;
+// the remaining fields have defaults (interval 1s, timeout 5s, retries 30).
+type ReadyCheck struct {
+	Script      string
+	Interval    time.Duration
+	Timeout     time.Duration
+	Retries     int
+	StartPeriod time.Duration
 }
 
 type Arg struct {
@@ -95,6 +128,9 @@ type SearchResult struct {
 	Exists  bool
 	Command *Command // non-nil if result is a command
 	Groups  []*Group // chain of groups from outermost to innermost
+	// Wait is the wait mode requested on the dependency edge that produced
+	// this result (set by ResolveDependencies; empty means "auto").
+	Wait string
 }
 
 func (c *AppConfig) BuildIndexes() error {

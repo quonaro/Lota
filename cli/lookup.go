@@ -44,9 +44,6 @@ func LoadConfigWithWriter(configPath string, warnTo io.Writer) (*config.AppConfi
 	}
 
 	if result.Error != nil {
-		if warnTo != nil {
-			_, _ = fmt.Fprintf(warnTo, "Error: %v\n\n", result.Error)
-		}
 		return nil, result.Error
 	}
 

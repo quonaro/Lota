@@ -1,8 +1,13 @@
 package config
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestIsURL(t *testing.T) {
@@ -118,7 +123,63 @@ func TestResolveImportPath(t *testing.T) {
 }
 
 func TestFetchURL(t *testing.T) {
-	// This test requires a real HTTP server, so we'll skip it for now
-	// In a real scenario, you'd set up a test server
-	t.Skip("FetchURL requires a test HTTP server")
+	want := []byte("build:\n  script: echo hi\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/bad" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(want)
+	}))
+	defer srv.Close()
+
+	// Unique URL per run so the shared /tmp cache can't mask a failed fetch.
+	url := fmt.Sprintf("%s/cfg-%d.yml", srv.URL, time.Now().UnixNano())
+	cachePath := GetCachePath(url)
+	_ = os.Remove(cachePath)
+	defer func() { _ = os.Remove(cachePath) }()
+
+	data, err := FetchURL(url)
+	if err != nil {
+		t.Fatalf("FetchURL: %v", err)
+	}
+	if string(data) != string(want) {
+		t.Errorf("FetchURL = %q, want %q", data, want)
+	}
+
+	// Second call should be served from cache with identical content.
+	cached, err := FetchURL(url)
+	if err != nil {
+		t.Fatalf("FetchURL cached: %v", err)
+	}
+	if string(cached) != string(want) {
+		t.Errorf("cached FetchURL = %q, want %q", cached, want)
+	}
+}
+
+func TestFetchURL_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	url := fmt.Sprintf("%s/missing-%d.yml", srv.URL, time.Now().UnixNano())
+	_ = os.Remove(GetCachePath(url))
+
+	_, err := FetchURL(url)
+	if err == nil {
+		t.Fatal("expected error for non-200 response")
+	}
+}
+
+func TestFetchURL_Unreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := fmt.Sprintf("%s/x-%d.yml", srv.URL, time.Now().UnixNano())
+	srv.Close() // shut down before fetching
+	_ = os.Remove(GetCachePath(url))
+
+	if _, err := FetchURL(url); err == nil {
+		t.Fatal("expected error for unreachable server")
+	}
 }

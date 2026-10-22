@@ -388,7 +388,8 @@ func gracefulWait(cmd *exec.Cmd, ctx context.Context, shutdownOnce *sync.Once, s
 		}
 
 		select {
-		case <-done:
+		case err := <-done:
+			_ = err
 			return ctx.Err()
 		case <-time.After(10 * time.Second):
 			_, _ = fmt.Fprintln(stderr, "Grace period exceeded, force-killing process...")
@@ -398,6 +399,24 @@ func gracefulWait(cmd *exec.Cmd, ctx context.Context, shutdownOnce *sync.Once, s
 			return ctx.Err()
 		}
 	}
+}
+
+// RunCheck executes a readiness-probe script quietly: all output is
+// discarded and only the exit status is reported. ctx bounds the attempt
+// (per-attempt timeout is applied by the caller via context).
+func RunCheck(ctx context.Context, script string, env []string, shell, baseDir, workingDir, dir string) error {
+	parts, err := splitShellCommand(shell)
+	if err != nil {
+		return err
+	}
+	if len(parts) == 0 {
+		return fmt.Errorf("empty shell command")
+	}
+	cmd := exec.CommandContext(ctx, parts[0], append(parts[1:], script)...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Dir = resolveDir(baseDir, workingDir, dir)
+	setupSysProcAttr(cmd)
+	return cmd.Run()
 }
 
 func summarizeShellCommand(shellParts []string, script string) string {

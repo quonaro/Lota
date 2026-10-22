@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -242,8 +243,10 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var allWg sync.WaitGroup
 	var firstErr atomic.Pointer[error]
+	// svcWg tracks service dependencies (wait: started/ready) that keep
+	// running in the background past their satisfaction point.
+	var svcWg sync.WaitGroup
 
 	for _, level := range levels {
 		logger.Debugf("engine: processing dependency level with %d commands", len(level))
@@ -254,49 +257,10 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 			return err
 		}
 
-		if parallel {
-			for _, dep := range level {
-				dep := dep
-				path := config.CommandPath(dep.Command, dep.Groups)
-				prefix := opts.formatPrefix(path, dep.Command, dep.Groups)
-
-				allWg.Add(1)
-				go func(d config.SearchResult, p string) {
-					defer allWg.Done()
-					if err := executeSingleCommand(ctx, cfg, d, opts, p); err != nil {
-						if ctx.Err() == context.Canceled {
-							return
-						}
-						wrapped := fmt.Errorf("dependency %s failed: %w", p, err)
-						firstErr.CompareAndSwap(nil, &wrapped)
-						cancel()
-					}
-				}(dep, prefix)
-			}
-		} else {
-			for _, dep := range level {
-				path := config.CommandPath(dep.Command, dep.Groups)
-				prefix := opts.formatPrefix(path, dep.Command, dep.Groups)
-				if opts.Stdout != nil {
-					_, _ = fmt.Fprintf(opts.Stdout, "=> Running dependency: %s\n", path)
-				} else {
-					fmt.Printf("=> Running dependency: %s\n", path)
-				}
-				if err := executeSingleCommand(ctx, cfg, dep, opts, prefix); err != nil {
-					return fmt.Errorf("dependency %s failed: %w", path, err)
-				}
-			}
+		if err := runDependencyLevel(ctx, cfg, level, parallel, opts, &firstErr, cancel, &svcWg); err != nil {
+			return err
 		}
 	}
-
-	if f := firstErr.Load(); f != nil {
-		return *f
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	allWg.Wait()
 
 	if f := firstErr.Load(); f != nil {
 		return *f
@@ -327,33 +291,47 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
 
+	var runErr error
 	if result.Command.Native {
 		logger.Debug("engine: executing native command")
 		cmdPath := config.CommandPath(result.Command, result.Groups)
-		if err := runNative(ctx, cmdPath, NativeContext{
+		runErr = runNative(ctx, cmdPath, NativeContext{
 			Vars:   vars,
 			Args:   parsedArgs,
 			Stdout: runOpts.Stdout,
 			Stderr: runOpts.Stderr,
-		}, opts.NativeHandlers); err != nil {
-			return err
-		}
+		}, opts.NativeHandlers)
 	} else {
 		logger.Debug("engine: executing shell command")
-		if err := runner.ExecuteCommand(ctx, result.Command, interpCtx, runOpts, shell, dir); err != nil {
-			return err
-		}
+		runErr = runner.ExecuteCommand(ctx, result.Command, interpCtx, runOpts, shell, dir)
 	}
 
-	return nil
+	// The run stays alive while service dependencies (wait: started/ready)
+	// are still running — like `docker compose up`. On failure we cancel
+	// them explicitly; on success we wait until they exit or ctx is done.
+	if runErr != nil {
+		cancel()
+	}
+	svcWg.Wait()
+
+	// A failed service dep predates a context-canceled main command.
+	if f := firstErr.Load(); f != nil {
+		return *f
+	}
+	if runErr != nil {
+		return runErr
+	}
+	return ctx.Err()
 }
 
-func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, opts Options, prefix string) error {
+// prepareCommand resolves args, vars, shell, logs, and working directory for
+// a command — shared between normal execution and readiness probes.
+func prepareCommand(cfg *config.AppConfig, result config.SearchResult, opts Options) (runner.InterpolationContext, runner.RunOptions, string, string, error) {
 	args := runner.ResolveArgs(*cfg, result.Groups, *result.Command)
 	shell := runner.ResolveShell(*cfg, result.Groups, *result.Command)
 	parsedArgs, err := runner.ParseArgs([]string{}, args)
 	if err != nil {
-		return err
+		return runner.InterpolationContext{}, runner.RunOptions{}, "", "", err
 	}
 	vars := runner.ResolveVars(*cfg, result.Groups, *result.Command)
 
@@ -364,11 +342,18 @@ func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result con
 		WarnWriter: opts.Stderr,
 	}
 
-	logs := runner.ResolveLogs(*cfg, result.Groups, *result.Command)
 	runOpts := opts.toRunOptions()
-	runOpts.Logs = logs
-
+	runOpts.Logs = runner.ResolveLogs(*cfg, result.Groups, *result.Command)
 	dir := runner.ResolveDir(*cfg, result.Groups, *result.Command)
+
+	return interpCtx, runOpts, shell, dir, nil
+}
+
+func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result config.SearchResult, opts Options, prefix string) error {
+	interpCtx, runOpts, shell, dir, err := prepareCommand(cfg, result, opts)
+	if err != nil {
+		return err
+	}
 
 	if result.Command.Native {
 		if prefix != "" {
@@ -376,8 +361,8 @@ func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result con
 		}
 		cmdPath := config.CommandPath(result.Command, result.Groups)
 		return runNative(ctx, cmdPath, NativeContext{
-			Vars:   vars,
-			Args:   parsedArgs,
+			Vars:   interpCtx.Vars,
+			Args:   interpCtx.Args,
 			Stdout: runOpts.Stdout,
 			Stderr: runOpts.Stderr,
 		}, opts.NativeHandlers)
@@ -387,6 +372,185 @@ func executeSingleCommand(ctx context.Context, cfg *config.AppConfig, result con
 		return runner.ExecuteCommandWithPrefix(ctx, result.Command, interpCtx, runOpts, shell, dir, prefix)
 	}
 	return runner.ExecuteCommand(ctx, result.Command, interpCtx, runOpts, shell, dir)
+}
+
+// depWaitMode resolves the effective wait mode for a dependency edge:
+// explicit wait wins; otherwise "ready" when the target declares a ready
+// check, "done" otherwise.
+func depWaitMode(dep config.SearchResult) string {
+	if dep.Wait != "" {
+		return dep.Wait
+	}
+	if dep.Command.Ready != nil {
+		return config.WaitReady
+	}
+	return config.WaitDone
+}
+
+// depOutcome reports how a dependency finished satisfying its wait mode.
+type depOutcome struct {
+	path string
+	err  error
+}
+
+// runDependencyLevel runs all dependencies of one level and blocks until
+// each of them is satisfied: done (process exited 0), ready (probe passed),
+// or started (process launched). Service dependencies keep running in the
+// background; a later non-zero exit fails the whole run via firstErr.
+func runDependencyLevel(ctx context.Context, cfg *config.AppConfig, level []config.SearchResult, parallel bool, opts Options, firstErr *atomic.Pointer[error], cancel context.CancelFunc, svcWg *sync.WaitGroup) error {
+	if !parallel {
+		for _, dep := range level {
+			path := config.CommandPath(dep.Command, dep.Groups)
+			prefix := opts.formatPrefix(path, dep.Command, dep.Groups)
+			if opts.Stdout != nil {
+				_, _ = fmt.Fprintf(opts.Stdout, "=> Running dependency: %s\n", path)
+			} else {
+				fmt.Printf("=> Running dependency: %s\n", path)
+			}
+			if err := runDependency(ctx, cfg, dep, opts, prefix, firstErr, cancel, svcWg); err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return ctxErr
+				}
+				return fmt.Errorf("dependency %s failed: %w", path, err)
+			}
+		}
+		return nil
+	}
+
+	outcomes := make(chan depOutcome, len(level))
+	for _, dep := range level {
+		dep := dep
+		path := config.CommandPath(dep.Command, dep.Groups)
+		prefix := opts.formatPrefix(path, dep.Command, dep.Groups)
+		go func(d config.SearchResult, p, name string) {
+			outcomes <- depOutcome{path: name, err: runDependency(ctx, cfg, d, opts, p, firstErr, cancel, svcWg)}
+		}(dep, prefix, path)
+	}
+
+	var levelErr error
+	for range level {
+		res := <-outcomes
+		if res.err != nil && !errors.Is(res.err, context.Canceled) && levelErr == nil {
+			levelErr = fmt.Errorf("dependency %s failed: %w", res.path, res.err)
+		}
+	}
+	if f := firstErr.Load(); f != nil {
+		return *f
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if levelErr != nil {
+		cancel()
+		return levelErr
+	}
+	return nil
+}
+
+// runDependency satisfies a single dependency according to its wait mode and
+// reports nil once satisfied. For "started"/"ready" it launches the command
+// in the background and keeps monitoring it for late failures.
+func runDependency(ctx context.Context, cfg *config.AppConfig, dep config.SearchResult, opts Options, prefix string, firstErr *atomic.Pointer[error], cancel context.CancelFunc, svcWg *sync.WaitGroup) error {
+	path := config.CommandPath(dep.Command, dep.Groups)
+	mode := depWaitMode(dep)
+
+	if mode == config.WaitDone || opts.DryRun {
+		return executeSingleCommand(ctx, cfg, dep, opts, prefix)
+	}
+
+	procErr := make(chan error, 1)
+	go func() {
+		procErr <- executeSingleCommand(ctx, cfg, dep, opts, prefix)
+	}()
+
+	if mode == config.WaitReady {
+		if err := waitReady(ctx, cfg, dep, opts, procErr); err != nil {
+			return err
+		}
+	}
+
+	// The service stays alive past its satisfied point and keeps the whole
+	// run alive (svcWg). If it exits with an error, the whole run fails.
+	svcWg.Add(1)
+	go func() {
+		defer svcWg.Done()
+		if err := <-procErr; err != nil && ctx.Err() == nil {
+			wrapped := fmt.Errorf("dependency %s failed: %w", path, err)
+			firstErr.CompareAndSwap(nil, &wrapped)
+			cancel()
+		}
+	}()
+	return nil
+}
+
+// waitReady polls the dependency's ready check until it passes, the process
+// exits, attempts are exhausted, or ctx is cancelled.
+func waitReady(ctx context.Context, cfg *config.AppConfig, dep config.SearchResult, opts Options, procErr chan error) error {
+	path := config.CommandPath(dep.Command, dep.Groups)
+	rc := dep.Command.Ready
+	if rc == nil {
+		return fmt.Errorf("dependency %s has no ready check", path)
+	}
+
+	interval := rc.Interval
+	if interval <= 0 {
+		interval = time.Second
+	}
+	timeout := rc.Timeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	retries := rc.Retries
+	if retries <= 0 {
+		retries = 30
+	}
+
+	interpCtx, _, shell, dir, err := prepareCommand(cfg, dep, opts)
+	if err != nil {
+		return err
+	}
+	env := runner.VarsToEnv(runner.MergeVarsAndArgs(interpCtx.Vars, interpCtx.Args))
+
+	script, err := runner.Interpolate(rc.Script, interpCtx)
+	if err != nil {
+		return fmt.Errorf("ready check interpolation failed: %w", err)
+	}
+
+	if opts.Stdout != nil {
+		_, _ = fmt.Fprintf(opts.Stdout, "=> Waiting for %s to become ready\n", path)
+	}
+
+	startDeadline := time.Now().Add(rc.StartPeriod)
+	failures := 0
+	for {
+		checkCtx, checkCancel := context.WithTimeout(ctx, timeout)
+		err := runner.RunCheck(checkCtx, script, env, shell, opts.ConfigDir, opts.WorkingDir, dir)
+		checkCancel()
+
+		if err == nil {
+			if opts.Stdout != nil {
+				_, _ = fmt.Fprintf(opts.Stdout, "=> %s is ready\n", path)
+			}
+			return nil
+		}
+		if time.Now().After(startDeadline) {
+			failures++
+		}
+		if failures > retries {
+			return fmt.Errorf("did not become ready after %d attempts: %w", failures, err)
+		}
+
+		select {
+		case perr := <-procErr:
+			if perr == nil {
+				return fmt.Errorf("exited before becoming ready")
+			}
+			return fmt.Errorf("exited before becoming ready: %w", perr)
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+	}
 }
 
 func resolveDependencyLevels(cfg *config.AppConfig, result config.SearchResult) ([][]config.SearchResult, error) {
@@ -410,8 +574,8 @@ func resolveDependencyLevels(cfg *config.AppConfig, result config.SearchResult) 
 		visited[path] = true
 
 		maxDepDepth := -1
-		for _, depPath := range cmd.Depends {
-			depResult, err := config.FindCommandByPath(cfg, depPath)
+		for _, dep := range cmd.Depends {
+			depResult, err := config.FindCommandByPath(cfg, dep.Name)
 			if err != nil {
 				continue
 			}

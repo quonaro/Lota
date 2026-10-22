@@ -303,7 +303,11 @@ func PrintCommandHelp(cfg *config.AppConfig, result config.SearchResult, w io.Wr
 		if len(cmd.Depends) > 0 {
 			_, _ = fmt.Fprintln(w, "Depends:")
 			for _, dep := range cmd.Depends {
-				_, _ = fmt.Fprintf(w, "  - %s\n", dep)
+				if dep.Wait != "" {
+					_, _ = fmt.Fprintf(w, "  - %s (wait: %s)\n", dep.Name, dep.Wait)
+				} else {
+					_, _ = fmt.Fprintf(w, "  - %s\n", dep.Name)
+				}
 			}
 			_, _ = fmt.Fprintln(w)
 		}

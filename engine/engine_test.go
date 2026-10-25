@@ -138,6 +138,81 @@ func TestRunCommand_ParallelDoesNotBlockLevels(t *testing.T) {
 	}
 }
 
+func TestRun_ParallelStartsDependentBranchWithoutWaitingForSibling(t *testing.T) {
+	dir := t.TempDir()
+	infraReady := filepath.Join(dir, "infra.ready")
+	frontendStarted := filepath.Join(dir, "frontend.started")
+	backendStarted := filepath.Join(dir, "backend.started")
+
+	cfg := &config.AppConfig{
+		Commands: []config.Command{
+			{Name: "infra", Script: "sleep 0.1 && touch " + infraReady},
+			{Name: "frontend", Script: "touch " + frontendStarted + " && sleep 30"},
+			{
+				Name:    "backend",
+				Script:  "test -f " + infraReady + " && touch " + backendStarted,
+				Depends: []config.Dependency{{Name: "infra"}},
+			},
+			{
+				Name: "dev", Script: "true",
+				Depends: []config.Dependency{{Name: "frontend"}, {Name: "backend"}},
+			},
+		},
+	}
+	if err := cfg.BuildIndexes(); err != nil {
+		t.Fatalf("BuildIndexes() error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- Run(ctx, cfg, []string{"dev"}, Options{})
+	}()
+
+	deadline := time.After(3 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(backendStarted); err == nil {
+			break
+		}
+		select {
+		case err := <-runDone:
+			t.Fatalf("Run() returned before backend started: %v", err)
+		case <-deadline:
+			cancel()
+			select {
+			case err := <-runDone:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("Run() error after cancellation = %v, want context.Canceled", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("Run() did not stop after cancellation")
+			}
+			t.Fatal("backend did not start while its independent frontend sibling was still running")
+		case <-ticker.C:
+		}
+	}
+
+	if _, err := os.Stat(frontendStarted); err != nil {
+		t.Fatalf("frontend sibling was not started: %v", err)
+	}
+	if _, err := os.Stat(infraReady); err != nil {
+		t.Fatalf("backend started before infra finished: %v", err)
+	}
+
+	cancel()
+	select {
+	case err := <-runDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run() error after cancellation = %v, want context.Canceled", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run() did not stop after cancellation")
+	}
+}
+
 func TestRunCommand_NestedCommandArgsDefault(t *testing.T) {
 	yamlContent := `
 version:

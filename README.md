@@ -623,7 +623,7 @@ backend-dev:
 Wait modes: `done` (default — process exits 0), `ready` (probe passes; service keeps running), `started` (launch only, no waiting). When `wait` is omitted the mode is **auto**: `ready` if the target has a `ready` block, `done` otherwise — so plain string entries keep working unchanged.
 
 If the service exits before becoming ready or the probe exhausts `retries`, the run fails and all siblings are cancelled. In `--dry-run` mode probes are skipped.
-
+\
 > **TODO:** A TUI for interactive task monitoring is under consideration for future versions.
 
 ### ⚡ Hooks Tutorial

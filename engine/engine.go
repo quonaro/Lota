@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -248,17 +247,31 @@ func runCommand(ctx context.Context, cfg *config.AppConfig, result config.Search
 	// running in the background past their satisfaction point.
 	var svcWg sync.WaitGroup
 
-	for _, level := range levels {
-		logger.Debugf("engine: processing dependency level with %d commands", len(level))
-		if f := firstErr.Load(); f != nil {
-			return *f
+	if parallel {
+		var deps []config.SearchResult
+		for _, level := range levels {
+			deps = append(deps, level...)
 		}
-		if err := ctx.Err(); err != nil {
+		if err := runParallelDependencies(ctx, cfg, result, deps, opts, &firstErr, cancel, &svcWg); err != nil {
+			cancel()
+			svcWg.Wait()
 			return err
 		}
+	} else {
+		for _, level := range levels {
+			logger.Debugf("engine: processing dependency level with %d commands", len(level))
+			if f := firstErr.Load(); f != nil {
+				return *f
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 
-		if err := runDependencyLevel(ctx, cfg, level, parallel, opts, &firstErr, cancel, &svcWg); err != nil {
-			return err
+			if err := runDependencyLevel(ctx, cfg, level, opts, &firstErr, cancel, &svcWg); err != nil {
+				cancel()
+				svcWg.Wait()
+				return err
+			}
 		}
 	}
 
@@ -387,62 +400,118 @@ func depWaitMode(dep config.SearchResult) string {
 	return config.WaitDone
 }
 
-// depOutcome reports how a dependency finished satisfying its wait mode.
-type depOutcome struct {
-	path string
-	err  error
+// dependencyExecution tracks one command and the prerequisites that gate it.
+type dependencyExecution struct {
+	result        config.SearchResult
+	prerequisites []*dependencyExecution
+	done          chan struct{}
+	err           error
+}
+
+// runParallelDependencies starts independent branches immediately while each
+// command waits only for its own prerequisites. A slow sibling must not block
+// a branch whose prerequisites have already been satisfied.
+func runParallelDependencies(ctx context.Context, cfg *config.AppConfig, root config.SearchResult, deps []config.SearchResult, opts Options, firstErr *atomic.Pointer[error], cancel context.CancelFunc, svcWg *sync.WaitGroup) error {
+	states := make(map[string]*dependencyExecution, len(deps))
+	for _, dep := range deps {
+		path := config.CommandPath(dep.Command, dep.Groups)
+		states[path] = &dependencyExecution{
+			result: dep,
+			done:   make(chan struct{}),
+		}
+	}
+
+	for path, state := range states {
+		for _, prerequisite := range state.result.Command.Depends {
+			result, err := config.FindCommandByPath(cfg, prerequisite.Name)
+			if err != nil {
+				return fmt.Errorf("dependency %q of %s: %w", prerequisite.Name, path, err)
+			}
+			prerequisitePath := config.CommandPath(result.Command, result.Groups)
+			prerequisiteState, ok := states[prerequisitePath]
+			if !ok {
+				return fmt.Errorf("dependency %q of %s was not resolved", prerequisite.Name, path)
+			}
+			state.prerequisites = append(state.prerequisites, prerequisiteState)
+		}
+	}
+
+	for path, state := range states {
+		path, state := path, state
+		go func() {
+			defer close(state.done)
+			for _, prerequisite := range state.prerequisites {
+				select {
+				case <-prerequisite.done:
+					if prerequisite.err != nil {
+						state.err = prerequisite.err
+						return
+					}
+				case <-ctx.Done():
+					state.err = ctx.Err()
+					return
+				}
+			}
+			if err := ctx.Err(); err != nil {
+				state.err = err
+				return
+			}
+
+			prefix := opts.formatPrefix(path, state.result.Command, state.result.Groups)
+			if err := runDependency(ctx, cfg, state.result, opts, prefix, firstErr, cancel, svcWg); err != nil {
+				if ctx.Err() != nil {
+					state.err = ctx.Err()
+					return
+				}
+				wrapped := fmt.Errorf("dependency %s failed: %w", path, err)
+				state.err = wrapped
+				firstErr.CompareAndSwap(nil, &wrapped)
+				cancel()
+			}
+		}()
+	}
+
+	for _, dependency := range root.Command.Depends {
+		result, err := config.FindCommandByPath(cfg, dependency.Name)
+		if err != nil {
+			return fmt.Errorf("dependency %q of %s: %w", dependency.Name, root.Command.Name, err)
+		}
+		path := config.CommandPath(result.Command, result.Groups)
+		state, ok := states[path]
+		if !ok {
+			return fmt.Errorf("dependency %q of %s was not resolved", dependency.Name, root.Command.Name)
+		}
+		<-state.done
+	}
+
+	if first := firstErr.Load(); first != nil {
+		return *first
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // runDependencyLevel runs all dependencies of one level and blocks until
 // each of them is satisfied: done (process exited 0), ready (probe passed),
 // or started (process launched). Service dependencies keep running in the
 // background; a later non-zero exit fails the whole run via firstErr.
-func runDependencyLevel(ctx context.Context, cfg *config.AppConfig, level []config.SearchResult, parallel bool, opts Options, firstErr *atomic.Pointer[error], cancel context.CancelFunc, svcWg *sync.WaitGroup) error {
-	if !parallel {
-		for _, dep := range level {
-			path := config.CommandPath(dep.Command, dep.Groups)
-			prefix := opts.formatPrefix(path, dep.Command, dep.Groups)
-			if opts.Stdout != nil {
-				_, _ = fmt.Fprintf(opts.Stdout, "=> Running dependency: %s\n", path)
-			} else {
-				fmt.Printf("=> Running dependency: %s\n", path)
-			}
-			if err := runDependency(ctx, cfg, dep, opts, prefix, firstErr, cancel, svcWg); err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					return ctxErr
-				}
-				return fmt.Errorf("dependency %s failed: %w", path, err)
-			}
-		}
-		return nil
-	}
-
-	outcomes := make(chan depOutcome, len(level))
+func runDependencyLevel(ctx context.Context, cfg *config.AppConfig, level []config.SearchResult, opts Options, firstErr *atomic.Pointer[error], cancel context.CancelFunc, svcWg *sync.WaitGroup) error {
 	for _, dep := range level {
-		dep := dep
 		path := config.CommandPath(dep.Command, dep.Groups)
 		prefix := opts.formatPrefix(path, dep.Command, dep.Groups)
-		go func(d config.SearchResult, p, name string) {
-			outcomes <- depOutcome{path: name, err: runDependency(ctx, cfg, d, opts, p, firstErr, cancel, svcWg)}
-		}(dep, prefix, path)
-	}
-
-	var levelErr error
-	for range level {
-		res := <-outcomes
-		if res.err != nil && !errors.Is(res.err, context.Canceled) && levelErr == nil {
-			levelErr = fmt.Errorf("dependency %s failed: %w", res.path, res.err)
+		if opts.Stdout != nil {
+			_, _ = fmt.Fprintf(opts.Stdout, "=> Running dependency: %s\n", path)
+		} else {
+			fmt.Printf("=> Running dependency: %s\n", path)
 		}
-	}
-	if f := firstErr.Load(); f != nil {
-		return *f
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if levelErr != nil {
-		cancel()
-		return levelErr
+		if err := runDependency(ctx, cfg, dep, opts, prefix, firstErr, cancel, svcWg); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			return fmt.Errorf("dependency %s failed: %w", path, err)
+		}
 	}
 	return nil
 }
